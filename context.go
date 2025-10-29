@@ -64,8 +64,16 @@ func (ctx *Context) Query(key string) string {
 
 func (ctx *Context) Next() {
 	ctx.index++
-	if ctx.index < len(ctx.middlewares) {
-		ctx.middlewares[ctx.index](ctx)
+
+	// Stop if we've run all middlewares (including the handler)
+	if ctx.index >= len(ctx.middlewares) {
+		return
+	}
+
+	// Execute the current middleware or handler
+	fn := ctx.middlewares[ctx.index]
+	if fn != nil {
+		fn(ctx)
 	}
 }
 

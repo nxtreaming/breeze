@@ -25,10 +25,21 @@ func (r *Router) Use(mw ...HandlerFunc) {
 	r.middlewares = append(r.middlewares, mw...)
 }
 
-func (r *Router) Handle(method Method, pattern string, handler HandlerFunc, mw ...HandlerFunc) {
-	segments := strings.Split(strings.Trim(pattern, "/"), "/")
-	allMw := append(r.middlewares, mw...) // combine global + per-route
-	r.routes = append(r.routes, &route{method, pattern, segments, handler, allMw})
+func (r *Router) Handle(method Method, pattern string, handler HandlerFunc) {
+	trimmed := strings.Trim(pattern, "/")
+	var segments []string
+	if trimmed == "" {
+		segments = []string{} // root route
+	} else {
+		segments = strings.Split(trimmed, "/")
+	}
+
+	r.routes = append(r.routes, &route{
+		method:   method,
+		pattern:  pattern,
+		segments: segments,
+		handler:  handler,
+	})
 }
 
 func (r *Router) Find(req *HTTPRequest) (HandlerFunc, []HandlerFunc, map[string]string) {
