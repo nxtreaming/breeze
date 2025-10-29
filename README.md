@@ -59,6 +59,7 @@ package main
 
 import (
 	"github.com/nelthaarion/breeze"
+	"runtime"
 )
 
 func main() {
@@ -77,7 +78,7 @@ func main() {
 	router.Handle(breeze.POST, "/echo", func(ctx *breeze.Context) {
 		ctx.JSON(map[string]string{"echo": string(ctx.Req.Body)})
 	})
-	app := breeze.New(router, breeze.NewWorkerPool(4))
+	app := breeze.New(router, breeze.NewWorkerPool(runtime.NumCPU()))
 	app.Run(8080, router)
 }
 ```
