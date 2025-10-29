@@ -77,8 +77,8 @@ func main() {
 	router.Handle(breeze.POST, "/echo", func(ctx *breeze.Context) {
 		ctx.JSON(map[string]string{"echo": string(ctx.Req.Body)})
 	})
-
-	breeze.Run(8080, router)
+	app := breeze.New(router, breeze.NewWorkerPool(4))
+	app.Run(8080, router)
 }
 ```
 
