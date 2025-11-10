@@ -66,9 +66,9 @@ func main() {
 	router := breeze.NewRouter()
 
 	// Global middleware
-	router.Use(func(ctx *breeze.Context, next breeze.HandlerFunc) {
+		router.Use(func(ctx *breeze.Context) {
 		println("Incoming request:", ctx.Req.Path)
-		next(ctx)
+		ctx.Next()
 	})
 
 	router.Handle(breeze.GET, "/", func(ctx *breeze.Context) {
