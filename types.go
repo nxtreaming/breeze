@@ -28,4 +28,9 @@ type HTTPResponse struct {
 	Status  int
 	Headers map[string]string
 	Body    []byte
+	// headersShared is true when Headers points to one of the package-level
+	// shared maps (hdrsJSON / hdrsText / hdrsHTML). SetHeader must copy-on-write
+	// before mutating. Go does not allow map == map comparisons, so we use this
+	// flag as the sentinel instead.
+	headersShared bool
 }
