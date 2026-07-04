@@ -45,24 +45,9 @@ func (b *Breeze) initWS() {
 	}
 }
 
-// WebSocket registers a WebSocket endpoint at the given path.
-// handler receives connection, message, and close events.
-//
-// Example:
-//
-//	app.WebSocket("/ws", &MyHandler{})
-//	// or inline:
-//	app.WebSocket("/ws", &breeze.WSHandlerFunc{
-//	    Message: func(c *breeze.WSConn, op byte, p []byte) {
-//	        app.Hub.BroadcastText(string(p))
-//	    },
-//	})
 // WebSocket registers a WebSocket endpoint at the given path and returns
 // the shared WSHub, which is created on the first call and reused for all
 // subsequent WebSocket routes.
-//
-//	hub := app.WebSocket("/ws", handler)
-//	// hub is non-nil immediately and can be stored in your handler struct
 func (b *Breeze) WebSocket(path string, handler WSHandler) *WSHub {
 	b.initWS()
 	b.wsHandlers[path] = handler
@@ -194,18 +179,22 @@ func (b *Breeze) handleWSTraffic(c gnet.Conn, state *wsConnState) gnet.Action {
 		case wsOpPing:
 			// RFC 6455 §5.5.2: respond with Pong, same payload.
 			pong := buildWSFrame(wsOpPong, frame.payload)
-			_ = c.AsyncWrite(pong, nil)
 			wsFramePool.Put(frame)
+			_ = c.AsyncWrite(pong, nil)
 
 		case wsOpPong:
 			// Unsolicited pong — ignore per spec.
 			wsFramePool.Put(frame)
 
 		case wsOpClose:
+			// FIX: Use frame.payload BEFORE returning frame to the pool.
+			// The original code called wsFramePool.Put(frame) and then
+			// read frame.payload to build the echo — a use-after-free
+			// because parseWSFrame may have reused the pooled *wsFrame
+			// and overwritten its payload slice.
 			code, reason := parseClosePayload(frame.payload)
-			wsFramePool.Put(frame)
-			// Echo the Close frame then clean up.
 			echo := buildWSFrame(wsOpClose, frame.payload)
+			wsFramePool.Put(frame)
 			_ = c.AsyncWrite(echo, nil)
 			b.cleanupWS(fd, wc, state.handler, code, reason)
 			return gnet.Close

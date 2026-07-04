@@ -9,20 +9,20 @@ import (
 	"github.com/nelthaarion/breeze"
 )
 
-// JWTOptions defines configurable JWT authentication behavior
+// JWTOptions defines configurable JWT authentication behavior.
 type JWTOptions struct {
 	AccessSecret       string                                            // Secret key for access tokens
 	RefreshSecret      string                                            // Secret key for refresh tokens
 	SigningMethod      jwt.SigningMethod                                 // e.g., jwt.SigningMethodHS256
 	TokenLookup        func(ctx *breeze.Context) (string, string, error) // returns (accessToken, refreshToken, error)
 	OnUnauthorized     func(ctx *breeze.Context, err error)              // Optional: custom 401 handler
-	UserContextKey     string                                            // Key to store claims in ctx.Params
+	UserContextKey     string                                            // Key to store claims in ctx store
 	RequiredRoles      []string                                          // Optional: roles required to access the route
 	ClaimsValidator    func(claims jwt.MapClaims) bool                   // Optional: extra claim validation
 	EnableRefreshToken bool                                              // Enable refresh token support
 }
 
-// DefaultTokenLookup extracts access token from Authorization header
+// DefaultTokenLookup extracts access token from Authorization header.
 func DefaultTokenLookup(ctx *breeze.Context) (string, string, error) {
 	authHeader := ctx.Req.Header["Authorization"]
 	if authHeader == "" {
@@ -35,13 +35,25 @@ func DefaultTokenLookup(ctx *breeze.Context) (string, string, error) {
 	return parts[1], "", nil
 }
 
-// DefaultUnauthorizedHandler returns 401 Unauthorized
+// DefaultUnauthorizedHandler returns 401 Unauthorized.
 func DefaultUnauthorizedHandler(ctx *breeze.Context, err error) {
 	ctx.Status(401)
 	ctx.WriteString("Unauthorized: " + err.Error())
 }
 
-// JWTAuthMiddleware returns a JWT authentication middleware
+// JWTAuthMiddleware returns a JWT authentication middleware.
+//
+// FIX: The original code stored claims via ctx.SetParam with
+// fmt.Sprintf("%v", claims), which produced an unparseable Go map
+// representation like "map[exp:...]". Downstream handlers could not
+// recover the claims. We now use ctx.Set (typed store) so handlers
+// can retrieve claims with a type assertion:
+//
+//	claims, ok := ctx.Get("user").(jwt.MapClaims)
+//
+// Performance: ctx.Set lazy-allocates the store map on first use (one
+// allocation, capacity 4). This is cheaper than fmt.Sprintf + SetParam
+// which allocated a formatted string on every authenticated request.
 func JWTAuthMiddleware(opts JWTOptions) breeze.HandlerFunc {
 	if opts.SigningMethod == nil {
 		opts.SigningMethod = jwt.SigningMethodHS256
@@ -68,10 +80,10 @@ func JWTAuthMiddleware(opts JWTOptions) breeze.HandlerFunc {
 
 		claims, valid := validateJWT(accessToken, opts.AccessSecret, opts.SigningMethod)
 		if !valid && opts.EnableRefreshToken && refreshToken != "" {
-			// Attempt refresh token
+			// Attempt refresh token.
 			refreshClaims, ok := validateJWT(refreshToken, opts.RefreshSecret, opts.SigningMethod)
 			if ok {
-				// Issue new access token
+				// Issue new access token.
 				newAccessToken, err := GenerateJWT(opts.AccessSecret, jwt.MapClaims{
 					"user_id": refreshClaims["user_id"],
 					"role":    refreshClaims["role"],
@@ -89,7 +101,7 @@ func JWTAuthMiddleware(opts JWTOptions) breeze.HandlerFunc {
 			return
 		}
 
-		// Check roles if specified
+		// Check roles if specified.
 		if len(opts.RequiredRoles) > 0 {
 			role, _ := claims["role"].(string)
 			found := false
@@ -105,24 +117,23 @@ func JWTAuthMiddleware(opts JWTOptions) breeze.HandlerFunc {
 			}
 		}
 
-		// Extra claims validation
+		// Extra claims validation.
 		if opts.ClaimsValidator != nil && !opts.ClaimsValidator(claims) {
 			opts.OnUnauthorized(ctx, fmt.Errorf("claims validation failed"))
 			return
 		}
 
-		// Save claims in context
-		if ctx.GetParams() == nil {
-			ctx.SetParams(map[string]string{})
-		}
-		ctx.SetParam(opts.UserContextKey, fmt.Sprintf("%v", claims))
+		// FIX: Store claims as a typed value instead of a fmt.Sprintf string.
+		// Downstream handlers retrieve with:
+		//   claims, ok := ctx.Get("user").(jwt.MapClaims)
+		ctx.Set(opts.UserContextKey, claims)
 		ctx.Next()
 	}
 }
 
 // --- Helpers ---
 
-// validateJWT parses and validates a token string
+// validateJWT parses and validates a token string.
 func validateJWT(tokenString, secret string, method jwt.SigningMethod) (jwt.MapClaims, bool) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if token.Method.Alg() != method.Alg() {
@@ -140,7 +151,7 @@ func validateJWT(tokenString, secret string, method jwt.SigningMethod) (jwt.MapC
 	return claims, true
 }
 
-// GenerateJWT generates a new JWT token
+// GenerateJWT generates a new JWT token.
 func GenerateJWT(secret string, claims jwt.MapClaims, duration time.Duration, method jwt.SigningMethod) (string, error) {
 	if method == nil {
 		method = jwt.SigningMethodHS256
@@ -153,7 +164,7 @@ func GenerateJWT(secret string, claims jwt.MapClaims, duration time.Duration, me
 	return token.SignedString([]byte(secret))
 }
 
-// GenerateRefreshToken generates a refresh token
+// GenerateRefreshToken generates a refresh token.
 func GenerateRefreshToken(secret string, claims jwt.MapClaims, duration time.Duration, method jwt.SigningMethod) (string, error) {
 	if method == nil {
 		method = jwt.SigningMethodHS256

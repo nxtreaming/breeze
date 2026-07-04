@@ -73,7 +73,7 @@ func main() {
 	// WebSocket() returns the hub immediately — inject it into the handler.
 	chat := &ChatHandler{}
 	chat.hub = app.WebSocket("/ws", chat)
-
+	// router.Use(middleware.LoggingMiddleware())
 	// Inline echo endpoint using WSHandlerFunc.
 	app.WebSocket("/ws/echo", &breeze.WSHandlerFunc{
 		Connect: func(conn *breeze.WSConn) {
@@ -86,13 +86,13 @@ func main() {
 	})
 
 	// ── HTTP routes ───────────────────────────────────────────────────────
-	router.Use(middleware.SwaggerMiddleware(router, middleware.SwaggerOptions{
-		Title:       "Breeze Example API",
-		Version:     "1.0.0",
-		Description: "A demonstration of the Breeze swagger middleware.",
-		JSONPath:    "/swagger.json",
-		UIPath:      "/swagger",
-	}))
+	// router.Use(middleware.SwaggerMiddleware(router, middleware.SwaggerOptions{
+	// 	Title:       "Breeze Example API",
+	// 	Version:     "1.0.0",
+	// 	Description: "A demonstration of the Breeze swagger middleware.",
+	// 	JSONPath:    "/swagger.json",
+	// 	UIPath:      "/swagger",
+	// }))
 	router.ServeStatic("/files", "./files/")
 	router.Handle(breeze.GET, "/users", listUsers,
 		middleware.DocGET("/users", swagger.RouteDoc{

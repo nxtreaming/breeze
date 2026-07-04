@@ -42,7 +42,7 @@ var crlfcrlf = []byte("\r\n\r\n")
 //   - splitPathQuery uses bytes.IndexByte → no url.Parse overhead.
 //   - toLowerASCII avoids allocation when the key is already lowercase.
 //   - url.ParseQuery copies internally — b2s(query) is transient and safe.
-//   - internMethod returns a package-level constant for the six known methods.
+//   - internMethod returns a package-level constant for the seven known methods.
 func ParseHTTPRequest(data []byte) (*HTTPRequest, int, error) {
 	// ── Find header boundary ───────────────────────────────────────────────
 	headerEnd := bytes.Index(data, crlfcrlf)
@@ -176,6 +176,10 @@ func toLowerASCII(b []byte) string {
 
 // internMethod returns a package-level Method constant without allocation.
 // Falls back to Method(string(b)) for unknown methods (not in hot path).
+//
+// FIX: Removed the 6-byte "OPTION" branch (not a real HTTP method) and added
+// a 7-byte "OPTIONS" branch matching RFC 9110. The old code never matched a
+// real OPTIONS preflight request, causing CORS preflight to 404.
 func internMethod(b []byte) Method {
 	switch len(b) {
 	case 3:
@@ -197,8 +201,12 @@ func internMethod(b []byte) Method {
 		if b[0] == 'D' && b[1] == 'E' && b[2] == 'L' && b[3] == 'E' && b[4] == 'T' && b[5] == 'E' {
 			return DELETE
 		}
-		if b[0] == 'O' && b[1] == 'P' && b[2] == 'T' && b[3] == 'I' && b[4] == 'O' && b[5] == 'N' {
-			return OPTION
+	case 7:
+		// FIX: OPTIONS is 7 bytes, not 6. The old code checked for the
+		// non-existent 6-byte "OPTION" method and never matched real
+		// CORS preflight requests.
+		if b[0] == 'O' && b[1] == 'P' && b[2] == 'T' && b[3] == 'I' && b[4] == 'O' && b[5] == 'N' && b[6] == 'S' {
+			return OPTIONS
 		}
 	}
 	return Method(string(b))

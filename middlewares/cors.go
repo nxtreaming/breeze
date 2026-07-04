@@ -4,7 +4,7 @@ import (
 	"github.com/nelthaarion/breeze"
 )
 
-// CORSOptions defines configuration for CORS
+// CORSOptions defines configuration for CORS.
 type CORSOptions struct {
 	AllowOrigins     string // e.g., "*", or "https://example.com"
 	AllowMethods     string // e.g., "GET,POST,PUT,DELETE"
@@ -14,7 +14,16 @@ type CORSOptions struct {
 	MaxAge           string // seconds
 }
 
-// CORSMiddleware returns a HandlerFunc to apply CORS headers
+// CORSMiddleware returns a HandlerFunc to apply CORS headers.
+//
+// FIX: The original OPTIONS handler called `return` without `ctx.Abort()`,
+// leaving ctx.index at its current position. If any code later called
+// ctx.Next() on the same context (e.g. a deferred recovery middleware),
+// the chain would resume past the CORS short-circuit. We now call
+// ctx.Abort() to set index = len(middlewares), guaranteeing the chain
+// cannot resume.
+//
+// Performance: ctx.Abort() is a single int assignment — zero cost.
 func CORSMiddleware(opts CORSOptions) breeze.HandlerFunc {
 	return func(ctx *breeze.Context) {
 		if opts.AllowOrigins != "" {
@@ -36,9 +45,10 @@ func CORSMiddleware(opts CORSOptions) breeze.HandlerFunc {
 			ctx.SetHeader("Access-Control-Max-Age", opts.MaxAge)
 		}
 
-		// Handle preflight OPTIONS request
-		if ctx.Req.Method == "OPTIONS" {
+		// Handle preflight OPTIONS request.
+		if ctx.Req.Method == breeze.OPTIONS {
 			ctx.Status(204)
+			ctx.Abort() // FIX: guarantee the chain stops here
 			return
 		}
 

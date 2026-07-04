@@ -6,12 +6,12 @@ import "net/url"
 type Method string
 
 const (
-	GET    Method = "GET"
-	PUT    Method = "PUT"
-	PATCH  Method = "PATCH"
-	POST   Method = "POST"
-	DELETE Method = "DELETE"
-	OPTION Method = "OPTION"
+	GET     Method = "GET"
+	PUT     Method = "PUT"
+	PATCH   Method = "PATCH"
+	POST    Method = "POST"
+	DELETE  Method = "DELETE"
+	OPTIONS Method = "OPTIONS" // FIX: was "OPTION" — RFC 9110 defines "OPTIONS"
 )
 
 // HTTPRequest holds a fully parsed HTTP request.

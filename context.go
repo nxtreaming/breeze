@@ -22,6 +22,16 @@ type Context struct {
 	params      map[string]string
 	middlewares []HandlerFunc
 	index       int
+
+	// store is a lazy-initialized typed key-value store for middleware that
+	// need to attach structured data (e.g. JWT claims, user objects) to the
+	// request context. It is nil until the first Set call, so requests that
+	// don't use it pay zero allocation cost.
+	//
+	// FIX: Added so middleware like JWT can store claims as a typed value
+	// instead of a fmt.Sprintf("%v") string that downstream handlers cannot
+	// parse back. This follows the same pattern used by Gin, Echo, and Fiber.
+	store map[string]any
 }
 
 // statusOrDefault returns the status code already set on ctx.Res, if any,
@@ -121,6 +131,48 @@ func (ctx *Context) SetHeader(key, value string) {
 		ctx.Res.Headers = make(map[string]string, 4)
 	}
 	ctx.Res.Headers[key] = value
+}
+
+// --- Typed store (Set/Get) ---
+//
+// FIX: These methods provide a typed key-value store so middleware can attach
+// structured data (JWT claims, user objects, trace IDs, etc.) to the context
+// without serializing to string. The store is lazy-initialized — requests that
+// never call Set pay zero allocation cost.
+//
+// Usage:
+//
+//	// In middleware:
+//	ctx.Set("user", claims)
+//
+//	// In handler:
+//	claims, ok := ctx.Get("user").(jwt.MapClaims)
+
+// Set stores a typed value under key. The store is allocated on first call.
+func (ctx *Context) Set(key string, val any) {
+	if ctx.store == nil {
+		ctx.store = make(map[string]any, 4)
+	}
+	ctx.store[key] = val
+}
+
+// Get retrieves a typed value. Returns (nil, false) if key is absent.
+func (ctx *Context) Get(key string) (any, bool) {
+	if ctx.store == nil {
+		return nil, false
+	}
+	v, ok := ctx.store[key]
+	return v, ok
+}
+
+// MustGet retrieves a typed value, panicking if key is absent.
+// Use only when you are certain the key was set (e.g. after JWT middleware).
+func (ctx *Context) MustGet(key string) any {
+	v, ok := ctx.Get(key)
+	if !ok {
+		panic("breeze: context key not found: " + key)
+	}
+	return v
 }
 
 // --- Params helpers ---
