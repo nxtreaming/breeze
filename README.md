@@ -31,6 +31,14 @@ go get github.com/nelthaarion/breeze
 
 ------------------------------------------------------------------------
 
+------------------------------------------------------------------------
+
+ [![Donate](https://donatr.ee/ethanwinters) 
+ <img width="185" height="215" alt="download" src="https://github.com/user-attachments/assets/def5c7fc-4c6e-480b-91a4-2a574f23a533" />
+
+
+------------------------------------------------------------------------
+
 # ✨ Features
 
 ### 🚀 Built for Extreme Performance
