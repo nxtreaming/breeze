@@ -194,6 +194,8 @@ func (c *Collector) registerRoutes(router *breeze.Router, app *breeze.Breeze) {
         router.Handle(breeze.GET, api+"/timeline", c.wrap(auth, c.handleTimelineList))
         router.Handle(breeze.GET, api+"/timeline/:id", c.wrap(auth, c.handleTimelineGet))
         router.Handle(breeze.GET, api+"/architecture", c.wrap(auth, c.handleArchitecture))
+                router.Handle(breeze.GET, api+"/db/tables", c.wrap(auth, c.handleDBTables))
+                router.Handle(breeze.GET, api+"/db/tables/:name", c.wrap(auth, c.handleDBTableData))
 
         // ── WebSocket endpoint for real-time updates ──────────────────────────
         if app != nil {
@@ -423,6 +425,38 @@ func (c *Collector) handleArchitecture(ctx *breeze.Context) {
                 "disconnected": disconnected,
                 "unknown":      unknown,
         })
+}
+
+func (c *Collector) handleDBTables(ctx *breeze.Context) {
+        inspector := c.DBInspector()
+        if inspector == nil {
+                ctx.JSON(map[string]any{"tables": []TableInfo{}})
+                return
+        }
+        tables, err := inspector.Tables()
+        if err != nil {
+                ctx.Status(500)
+                ctx.JSON(map[string]any{"error": err.Error()})
+                return
+        }
+        ctx.JSON(map[string]any{"tables": tables})
+}
+
+func (c *Collector) handleDBTableData(ctx *breeze.Context) {
+        inspector := c.DBInspector()
+        if inspector == nil {
+                ctx.JSON(TableData{Table: ctx.Param("name"), Page: 1, PageSize: 50, Total: 0, Rows: []map[string]any{}, Columns: []TableColumn{}})
+                return
+        }
+        page := atoiDefault(ctx.Query("page"), 1)
+        pageSize := atoiDefault(ctx.Query("page_size"), 50)
+        data, err := inspector.TableData(ctx.Param("name"), page, pageSize, ctx.Query("search"))
+        if err != nil {
+                ctx.Status(500)
+                ctx.JSON(map[string]any{"error": err.Error()})
+                return
+        }
+        ctx.JSON(data)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────

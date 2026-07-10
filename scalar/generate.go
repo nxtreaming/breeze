@@ -1,4 +1,4 @@
-package swagger
+package scalar
 
 import (
 	"fmt"
@@ -48,7 +48,6 @@ func Generate() []byte {
 	return b
 }
 
-// buildOperation converts a routeEntry into an OpenAPI Operation.
 func buildOperation(entry routeEntry) Operation {
 	doc := entry.doc
 	op := Operation{
@@ -58,12 +57,9 @@ func buildOperation(entry routeEntry) Operation {
 		Responses:   map[string]Response{},
 	}
 
-	// ── Parameters & request body ──────────────────────────────────────────
 	for _, group := range doc.Input {
 		switch group.Type {
-
 		case InputParams:
-			// Path parameters – reflect the struct fields as individual params
 			schema := InferSchema(group.Fields)
 			if schema != nil && schema.Properties != nil {
 				for name, fieldSchema := range schema.Properties {
@@ -76,9 +72,7 @@ func buildOperation(entry routeEntry) Operation {
 					})
 				}
 			}
-
 		case InputQuery:
-			// Query parameters – each struct field becomes a separate param
 			schema := InferSchema(group.Fields)
 			if schema != nil && schema.Properties != nil {
 				for name, fieldSchema := range schema.Properties {
@@ -100,9 +94,7 @@ func buildOperation(entry routeEntry) Operation {
 					})
 				}
 			}
-
 		case InputHeader:
-			// Header parameters
 			schema := InferSchema(group.Fields)
 			if schema != nil && schema.Properties != nil {
 				for name, fieldSchema := range schema.Properties {
@@ -114,9 +106,7 @@ func buildOperation(entry routeEntry) Operation {
 					})
 				}
 			}
-
 		case InputBody:
-			// Request body – the whole struct as a JSON object schema
 			bodySchema := InferSchema(group.Fields)
 			if bodySchema != nil {
 				op.RequestBody = &RequestBody{
@@ -130,7 +120,6 @@ func buildOperation(entry routeEntry) Operation {
 		}
 	}
 
-	// ── Response ────────────────────────────────────────────────────────────
 	status := doc.OutputStatus
 	if status == 0 {
 		status = 200
@@ -157,37 +146,41 @@ func buildOperation(entry routeEntry) Operation {
 }
 
 // GenerateUI returns an HTML page that embeds Scalar pointing at jsonPath.
-// jsonPath is the URL the browser will fetch the OpenAPI JSON from (e.g. "/openapi.json").
 func GenerateUI(jsonPath string) []byte {
 	html := `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-	<title>Scalar API Reference</title>
-	<style>
-		html, body {
-			margin: 0;
-			width: 100%;
-			min-height: 100%;
-			background: #0b1020;
-		}
+  <title>Scalar API Reference</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      min-height: 100%;
+      background: #0b1020;
+    }
 
-		scalar-api-reference {
-			display: block;
-			min-height: 100vh;
-		}
-	</style>
+		#app {
+      display: block;
+      min-height: 100vh;
+    }
+  </style>
 </head>
 <body>
-<scalar-api-reference id="scalar-reference" url="` + jsonPath + `"></scalar-api-reference>
+<div id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+<script>
+	Scalar.createApiReference('#app', {
+		url: '` + jsonPath + `',
+	})
+</script>
 </body>
 </html>`
+
 	return []byte(strings.TrimSpace(html))
 }
 
-// httpStatusText maps common status codes to their reason phrases.
 func httpStatusText(code int) string {
 	m := map[int]string{
 		200: "OK",

@@ -76,6 +76,9 @@ type Collector struct {
         // Architecture visualization page.
         connStore *connectionStore
 
+        // Database inspector used by the database browser.
+        dbInspector DBInspector
+
         // Persistence: storage backend + state tracking.
         storage     Storage
         uniqueIPsMu sync.RWMutex
@@ -125,6 +128,21 @@ func newCollector(cfg Config, router *breeze.Router) *Collector {
                 uniqueIPs:   make(map[string]bool),
                 dailyCounts: make(map[string]int64),
         }
+}
+
+// DBInspector exposes the current cached database inspector, if one was set.
+func (c *Collector) DBInspector() DBInspector {
+        return c.dbInspector
+}
+
+// SetDBInspector installs a database inspector behind a cache layer.
+// Passing nil clears the inspector.
+func (c *Collector) SetDBInspector(inspector DBInspector) {
+        if inspector == nil {
+                c.dbInspector = nil
+                return
+        }
+        c.dbInspector = newCachedDBInspector(inspector, 30*time.Second)
 }
 
 // Config returns the active configuration.

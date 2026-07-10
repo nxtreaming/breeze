@@ -32,7 +32,7 @@ efficiently while keeping your code clean and maintainable.
   - [Built for Extreme Performance](#-built-for-extreme-performance)
   - [High-Performance Routing](#-high-performance-routing)
   - [Native WebSocket Engine](#-native-websocket-engine)
-  - [Built-in OpenAPI / Swagger](#-built-in-openapi--swagger)
+    - [Built-in OpenAPI / Scalar](#-built-in-openapi--scalar)
   - [Production Middleware](#-production-middleware)
   - [Built-in Developer Dashboard](#-built-in-developer-dashboard)
   - [Developer Experience](#-developer-experience)
@@ -128,13 +128,13 @@ go run main.go
 - 🚪 Graceful close frames
 - 🧵 Concurrent connection management
 
-### 📚 Built-in OpenAPI / Swagger
+### 📚 Built-in OpenAPI / Scalar
 
 - 📖 Automatic OpenAPI 3.1 generation
 - 📝 Route registration
 - 🎯 Schema generation
 - 🔍 Typed request & response definitions
-- 🌍 Ready for Swagger UI
+- 🌍 Ready for Scalar API Reference
 
 ### 🛡 Production Middleware
 

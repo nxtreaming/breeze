@@ -18,7 +18,7 @@ Horizon, and Grafana. Designed specifically for Breeze.
 - Overview — real-time cards (RPS, latency, error rate, goroutines, heap,
   CPU, cache hit ratio, queue jobs) + 4 live charts
 - Routes Explorer — every registered route with per-route latency stats
-- API Explorer — native API client (no Swagger redirect) with one-click
+- API Explorer — native API client (no Scalar redirect) with one-click
   code generation in curl / Go / JavaScript / Python / C# / PHP
 - Live Requests — every incoming request with method/status/route/user
   filters, slow-request highlighting

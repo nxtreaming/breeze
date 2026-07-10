@@ -36,7 +36,7 @@ type FieldSchema struct {
 }
 
 // handleAPIExplorerList returns the list of routes formatted for the API
-// explorer, with parameter schemas extracted from the swagger registry
+// explorer, with parameter schemas extracted from the Scalar registry
 // (if available) or inferred from the route pattern.
 func (c *Collector) handleAPIExplorerList(ctx *breeze.Context) {
 	routes := make([]APIExplorerRoute, 0)

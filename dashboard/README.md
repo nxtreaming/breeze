@@ -65,7 +65,7 @@ Detailed Go runtime metrics: Goroutines, Heap Alloc, Heap Sys, Stack In Use, GC 
 Every registered route with Method, Path, Requests, Avg Latency, Max Latency, Last Request, and Errors. Search by path or method.
 
 #### 6. API Explorer
-A native API client built into the dashboard (no Swagger redirect). Select any registered endpoint, set headers/body, and execute. The response is pretty-printed and one-click copy buttons generate ready-to-run snippets in **curl, Go, JavaScript, Python, C#, and PHP**.
+A native API client built into the dashboard (no Scalar redirect). Select any registered endpoint, set headers/body, and execute. The response is pretty-printed and one-click copy buttons generate ready-to-run snippets in **curl, Go, JavaScript, Python, C#, and PHP**.
 
 #### 7. Database Browser
 Browse every table with pagination, search, and column metadata (type, nullable, primary key, index, defaults, foreign-key references). Read-only by default — no raw SQL editor.

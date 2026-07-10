@@ -6,7 +6,7 @@ import (
 
 	"github.com/nelthaarion/breeze"
 	middleware "github.com/nelthaarion/breeze/middlewares"
-	"github.com/nelthaarion/breeze/swagger"
+	"github.com/nelthaarion/breeze/scalar"
 )
 
 // ─── HTTP request / response types ───────────────────────────────────────────
@@ -86,22 +86,22 @@ func main() {
 	})
 
 	// ── HTTP routes ───────────────────────────────────────────────────────
-	// router.Use(middleware.SwaggerMiddleware(router, middleware.SwaggerOptions{
-	// 	Title:       "Breeze Example API",
-	// 	Version:     "1.0.0",
-	// 	Description: "A demonstration of the Breeze swagger middleware.",
-	// 	JSONPath:    "/swagger.json",
-	// 	UIPath:      "/swagger",
-	// }))
+	router.Use(middleware.ScalarMiddleware(router, middleware.ScalarOptions{
+		Title:       "Breeze Example API",
+		Version:     "1.0.0",
+		Description: "A demonstration of the Breeze Scalar middleware.",
+		JSONPath:    "/openapi.json",
+		UIPath:      "/scalar",
+	}))
 	router.ServeStatic("/files", "./files/")
 	router.Handle(breeze.GET, "/users", listUsers,
-		middleware.DocGET("/users", swagger.RouteDoc{
+		middleware.DocGET("/users", scalar.RouteDoc{
 			Title:       "List users",
 			Tags:        []string{"Users"},
 			Description: "Returns a paginated list of users.",
-			Input: []swagger.InputGroup{
+			Input: []scalar.InputGroup{
 				{
-					Type:        swagger.InputQuery,
+					Type:        scalar.InputQuery,
 					Fields:      UserQueryParams{},
 					Description: "Pagination and sorting options",
 				},
@@ -114,12 +114,12 @@ func main() {
 
 	// POST /users — create user
 	router.Handle(breeze.POST, "/users", createUser,
-		middleware.DocPOST("/users", swagger.RouteDoc{
+		middleware.DocPOST("/users", scalar.RouteDoc{
 			Title: "Create user",
 			Tags:  []string{"Users"},
-			Input: []swagger.InputGroup{
+			Input: []scalar.InputGroup{
 				{
-					Type:     swagger.InputBody,
+					Type:     scalar.InputBody,
 					Fields:   CreateUserRequest{},
 					Required: true,
 				},
@@ -131,12 +131,12 @@ func main() {
 
 	// GET /users/:id — get single user
 	router.Handle(breeze.GET, "/users/:id", getUser,
-		middleware.DocGET("/users/:id", swagger.RouteDoc{
+		middleware.DocGET("/users/:id", scalar.RouteDoc{
 			Title: "Get user by ID",
 			Tags:  []string{"Users"},
-			Input: []swagger.InputGroup{
+			Input: []scalar.InputGroup{
 				{
-					Type:   swagger.InputParams,
+					Type:   scalar.InputParams,
 					Fields: UserPathParams{},
 				},
 			},
@@ -146,11 +146,11 @@ func main() {
 
 	// DELETE /users/:id — delete user
 	router.Handle(breeze.DELETE, "/users/:id", deleteUser,
-		middleware.DocDELETE("/users/:id", swagger.RouteDoc{
+		middleware.DocDELETE("/users/:id", scalar.RouteDoc{
 			Title: "Delete user",
 			Tags:  []string{"Users"},
-			Input: []swagger.InputGroup{
-				{Type: swagger.InputParams, Fields: UserPathParams{}},
+			Input: []scalar.InputGroup{
+				{Type: scalar.InputParams, Fields: UserPathParams{}},
 			},
 			Output:            struct{}{},
 			OutputStatus:      204,

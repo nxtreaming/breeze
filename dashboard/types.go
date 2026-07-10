@@ -37,6 +37,30 @@ type QueryRecord struct {
         Error      string    `json:"error,omitempty"`
 }
 
+// TableInfo describes one database table in the dashboard database browser.
+type TableInfo struct {
+        Name string `json:"name"`
+        Rows int64  `json:"rows"`
+}
+
+// TableColumn describes one column in a database table.
+type TableColumn struct {
+        Name       string `json:"name"`
+        Type       string `json:"type"`
+        PrimaryKey bool   `json:"primary_key,omitempty"`
+        Nullable   bool   `json:"nullable,omitempty"`
+}
+
+// TableData is one paginated table view used by the database browser.
+type TableData struct {
+        Table    string                 `json:"table"`
+        Page     int                    `json:"page"`
+        PageSize int                    `json:"page_size"`
+        Total    int64                  `json:"total"`
+        Columns  []TableColumn          `json:"columns,omitempty"`
+        Rows     []map[string]any       `json:"rows,omitempty"`
+}
+
 // RouteStat aggregates per-route metrics.
 type RouteStat struct {
         Method       string  `json:"method"`
