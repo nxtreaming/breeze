@@ -28,6 +28,7 @@ efficiently while keeping your code clean and maintainable.
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [CLI — Scaffolding & Code Generation](#-cli--scaffolding--code-generation)
 - [Features](#features)
   - [Built for Extreme Performance](#-built-for-extreme-performance)
   - [High-Performance Routing](#-high-performance-routing)
@@ -96,6 +97,43 @@ go run main.go
 # → curl http://localhost:3000/        → {"status":"ok"}
 # → curl http://localhost:3000/users/42 → {"id":"42"}
 ```
+
+## 🧰 CLI — Scaffolding & Code Generation
+
+Breeze ships a `rails`-style CLI for scaffolding projects and generating
+CRUD boilerplate.
+
+```bash
+go install github.com/nelthaarion/breeze/cmd/breeze@latest
+```
+
+**Start a new project:**
+
+```bash
+breeze new myapp                    # minimal REST API layout (default)
+breeze new myapp --template=views   # + views/components/template engine
+```
+
+**Generate a full CRUD resource** — structs, handlers, an in-memory store,
+and OpenAPI docs, wired into the router automatically:
+
+```bash
+breeze generate resource User name:string email:string age:int
+```
+
+**Generate a bare handler stub** (no structs, no docs):
+
+```bash
+breeze generate handler Session --methods=get,create
+```
+
+Both generators write to `handlers/<name>.go` and register routes in a
+single `routes_generated.go` file — your hand-written `main.go` is never
+touched. Re-running `generate` for the same resource replaces its block,
+so it's safe to regenerate after adding fields (pass `--force` to overwrite
+the handler file too).
+
+Supported field types: `string`, `int`, `int64`, `float64`, `bool`, `time.Time`.
 
 ## Features
 
