@@ -44,6 +44,7 @@ var S = {
   expandedRows: {},
   expandedSteps: {},
   expandedTimeline: null,
+  _scroll: {}, // per-page scrollTop, keyed by page id
 };
 
 // ─── Utils ─────────────────────────────────────────────────────────────
@@ -229,7 +230,17 @@ function navHTML(){
 function pageLabel(id){for(var i=0;i<PAGES.length;i++) if(PAGES[i][0]===id) return PAGES[i][1]; return id;}
 function pageIcon(id){for(var i=0;i<PAGES.length;i++) if(PAGES[i][0]===id) return PAGES[i][2]; return '';}
 
-function go(page){
+function validPage(id){
+  return PAGES.some(function(p){return p[0]===id;});
+}
+function saveScroll(){
+  var c = $('.content');
+  if(c) S._scroll[S.page] = c.scrollTop;
+}
+
+// render() performs the actual DOM switch for a page. It never touches
+// browser history — callers decide whether/how the URL should change.
+function render(page){
   S.page = page;
   $$('.nav-item').forEach(function(n){
     n.classList.toggle('active', n.dataset.page===page);
@@ -239,23 +250,47 @@ function go(page){
   if(p) p.classList.add('active');
   $('.topbar h2').textContent = pageLabel(page);
   loadPage(page);
-  if(history.replaceState) history.replaceState(null, '', '#/'+page);
+  var c = $('.content');
+  if(c) c.scrollTop = S._scroll[page] || 0;
 }
+
+// go() is the entry point for app-initiated navigation (sidebar clicks, etc).
+// It pushes a new history entry so Back/Forward have something to work with.
+function go(page){
+  if(!validPage(page)) page = 'overview';
+  if(page === S.page && location.hash === '#/'+page) return; // no-op: avoids duplicate history entries
+  saveScroll();
+  render(page);
+  if(history.pushState) history.pushState(null, '', '#/'+page);
+}
+
+// syncFromHash() re-syncs the UI with location.hash. Used for Back/Forward
+// (popstate) and manual hash edits (hashchange) — it never itself calls
+// pushState/replaceState, so it can't create loops or duplicate entries.
+function syncFromHash(){
+  var hash = location.hash.replace(/^#\//,'');
+  var page = validPage(hash) ? hash : 'overview';
+  if(page === S.page) return;
+  saveScroll();
+  render(page);
+}
+window.addEventListener('popstate', syncFromHash);
+window.addEventListener('hashchange', syncFromHash);
 
 function loadPage(page){
   switch(page){
     case 'overview': renderOverview(); break;
-    case 'routes': api('routes').then(function(d){S.routes=d;renderRoutes();}); break;
+    case 'routes': if(S.routes.length) renderRoutes(); api('routes').then(function(d){S.routes=d;renderRoutes();}); break;
     case 'api': if(!S.apiRoutes.length) api('api-explorer').then(function(d){S.apiRoutes=d;renderAPIExplorer();}); else renderAPIExplorer(); break;
     case 'requests': renderRequests(); break;
     case 'database': renderDatabase(); api('db/tables').then(function(d){S.dbTables=d.tables||[];renderDatabase();}).catch(function(){}); break;
     case 'queries': renderQueries(); break;
-    case 'cache': api('cache').then(function(d){S.cache=d;renderCache();}); break;
-    case 'queue': api('queue').then(function(d){S.queue=d;renderQueue();}); break;
-    case 'scheduler': api('scheduler').then(function(d){S.tasks=d;renderScheduler();}); break;
+    case 'cache': if(S.cache) renderCache(); api('cache').then(function(d){S.cache=d;renderCache();}); break;
+    case 'queue': if(S.queue) renderQueue(); api('queue').then(function(d){S.queue=d;renderQueue();}); break;
+    case 'scheduler': if(S.tasks) renderScheduler(); api('scheduler').then(function(d){S.tasks=d;renderScheduler();}); break;
     case 'logs': renderLogs(); break;
-    case 'health': api('health').then(function(d){S.health=d;renderHealth();}); break;
-    case 'performance': api('performance').then(function(d){S.perf=d;renderPerformance();}); break;
+    case 'health': if(S.health) renderHealth(); api('health').then(function(d){S.health=d;renderHealth();}); break;
+    case 'performance': if(S.perf) renderPerformance(); api('performance').then(function(d){S.perf=d;renderPerformance();}); break;
     case 'timeline': if(!S.timelines.length) api('timeline').then(function(d){S.timelines=d;renderTimelineList();}); else renderTimelineList(); break;
   }
 }
@@ -941,9 +976,12 @@ function init(){
     content.appendChild(el('div', {id:'page-'+p[0], class:'page'}));
   });
 
-  // Initial route
+  // Initial route — normalize the URL with replaceState only; pushState is
+  // reserved for app-initiated navigation (see go()).
   var hash = location.hash.replace(/^#\//,'');
-  go(hash && PAGES.some(function(p){return p[0]===hash;}) ? hash : 'overview');
+  var initialPage = validPage(hash) ? hash : 'overview';
+  render(initialPage);
+  if(history.replaceState) history.replaceState(null, '', '#/'+initialPage);
 
   // Connect WebSocket
   connectWS();

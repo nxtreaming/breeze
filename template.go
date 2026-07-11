@@ -814,39 +814,151 @@ func breezeRuntime() string {
 
   // ── SPA navigation ─────────────────────────────────────────────────────
 
+  // Take manual control of scroll restoration. The browser's native
+  // restoration runs synchronously on popstate — before our async fragment
+  // fetch resolves — which would restore scroll against stale content. We
+  // restore scroll ourselves once the new content is in place instead.
+  if ('scrollRestoration' in history) {
+    try { history.scrollRestoration = 'manual'; } catch (e) {}
+  }
+
   function getAppTarget() {
     return document.getElementById('breeze-app') ||
            document.querySelector('main') ||
            document.body;
   }
 
+  // Persists the current scroll offset onto the *current* history entry so
+  // it can be restored later if the user navigates back/forward to it.
+  // Called continuously (debounced) while scrolling, and once more right
+  // before any programmatic navigation, so the saved value is always fresh
+  // regardless of which path the user takes away from the page.
+  function _saveScroll() {
+    try {
+      var s = (history.state && typeof history.state === 'object') ? history.state : {};
+      history.replaceState(
+        Object.assign({}, s, { scrollY: window.scrollY }),
+        '',
+        window.location.pathname + window.location.search
+      );
+    } catch (e) {}
+  }
+
+  var _scrollSaveTimer = null;
+  window.addEventListener('scroll', function () {
+    if (_scrollSaveTimer) return;
+    _scrollSaveTimer = setTimeout(function () {
+      _scrollSaveTimer = null;
+      _saveScroll();
+    }, 150);
+  }, { passive: true });
+
+  // Caches successful partial-fragment responses by normalized URL so that
+  // revisiting an already-fetched route (e.g. A -> B -> A, or Back/Forward)
+  // reuses the cached HTML instead of re-fetching. Failed responses are
+  // never cached. In-memory only, capped to avoid unbounded growth on
+  // long-lived sessions.
+  var _routeCache    = new Map();
+  var _routeCacheMax = 50;
+
+  function _normalizeUrl(url) {
+    try {
+      var u = new URL(url, window.location.origin);
+      return u.pathname + u.search;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  function _cacheRoute(key, html) {
+    if (_routeCache.has(key)) _routeCache.delete(key); // refresh recency
+    _routeCache.set(key, html);
+    if (_routeCache.size > _routeCacheMax) {
+      _routeCache.delete(_routeCache.keys().next().value); // evict oldest
+    }
+  }
+
+  // Internal invalidation helpers — not wired to any operation yet, kept
+  // available for future callers that mutate server state and need to
+  // force a fresh fetch on next visit to a route (or all routes).
+  function _invalidateRoute(url) {
+    _routeCache.delete(_normalizeUrl(url));
+  }
+
+  function _invalidateCache() {
+    _routeCache.clear();
+  }
+
+  // Monotonic sequence guard: if a newer navigation starts while an older
+  // one is still in flight, the older response is discarded on arrival so
+  // out-of-order fetches can never clobber newer content (duplicate/stale
+  // rendering) or push a stale history entry. Paired with an AbortController
+  // so the superseded request is actually cancelled, not just ignored.
+  var _navSeq       = 0;
+  var _navController = null;
+
   async function navigate(url, push) {
     // Before hook — returning false cancels navigation.
     if (_runHooks('beforeNavigate', { url: url }) === false) return;
 
+    // Cancel any navigation request still in flight — its response would
+    // be discarded anyway, so stop wasting bandwidth/CPU on it.
+    if (_navController) _navController.abort();
+    var controller = new AbortController();
+    _navController = controller;
+
+    var seq = ++_navSeq;
+    var key = _normalizeUrl(url);
     _loadingStart();
     try {
-      var res = await fetch(url, {
-        headers: { 'X-Breeze-Partial': 'true' },
-        credentials: 'same-origin',
-      });
+      var html = _routeCache.get(key);
 
-      if (!res.ok) { window.location.href = url; return; }
+      if (html === undefined) {
+        var res = await fetch(url, {
+          headers: { 'X-Breeze-Partial': 'true' },
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
 
-      var html = await res.text();
+        if (!res.ok) { window.location.href = url; return; }
+
+        html = await res.text();
+        _cacheRoute(key, html);
+      }
+
+      // A newer navigation started while this fetch was in flight — drop
+      // this stale response rather than render/push it out of order.
+      if (seq !== _navSeq) return;
+
       var target = getAppTarget();
       swap(target, html);
 
-      if (push) { history.pushState({ breezeUrl: url }, '', url); }
+      if (push) { history.pushState({ breezeUrl: url, scrollY: 0 }, '', url); }
 
       window.dispatchEvent(new CustomEvent('breeze:navigate', { detail: { url: url } }));
-      window.scrollTo(0, 0);
+
+      // Restore/reset scroll only after the browser has finished laying out
+      // the newly swapped DOM (next frame), so we don't scroll against
+      // stale geometry from before the swap.
+      requestAnimationFrame(function () {
+        if (push) {
+          window.scrollTo(0, 0);
+        } else {
+          var restoreY = (history.state && typeof history.state.scrollY === 'number')
+            ? history.state.scrollY : 0;
+          window.scrollTo(0, restoreY);
+        }
+      });
 
       _runHooks('afterNavigate', { url: url });
     } catch (e) {
+      // A superseded navigation's request was aborted on purpose — that is
+      // not a network failure, so it must never trigger the error fallback.
+      if (e && e.name === 'AbortError') return;
       window.location.href = url;
     } finally {
-      _loadingEnd();
+      if (_navController === controller) _navController = null;
+      if (seq === _navSeq) _loadingEnd();
     }
   }
 
@@ -863,8 +975,14 @@ func breezeRuntime() string {
     ) return;
 
     e.preventDefault();
-    var targetUrl = new URL(href, window.location.origin).pathname;
-    if (targetUrl === window.location.pathname && !href.includes('?')) return;
+    var targetUrl   = new URL(href, window.location.origin);
+    var targetFull  = targetUrl.pathname + targetUrl.search;
+    var currentFull = window.location.pathname + window.location.search;
+    // Skip only when the destination is truly identical (path AND query) —
+    // comparing pathname alone let same-path-same-query clicks through and
+    // push a duplicate history entry for the URL already on screen.
+    if (targetFull === currentFull) return;
+    _saveScroll();
     navigate(href, true);
   });
 
@@ -874,7 +992,7 @@ func breezeRuntime() string {
 
   if (!history.state || !history.state.breezeUrl) {
     history.replaceState(
-      { breezeUrl: window.location.pathname + window.location.search },
+      { breezeUrl: window.location.pathname + window.location.search, scrollY: window.scrollY },
       '',
       window.location.pathname + window.location.search
     );
@@ -934,6 +1052,7 @@ func breezeRuntime() string {
       data.forEach(function (val, key) { params.append(key, val); });
       var qs  = params.toString();
       var url = actionUrl.pathname + (qs ? '?' + qs : '');
+      _saveScroll();
       navigate(url, true).finally(_loadingEnd);
       return;
     }
@@ -966,6 +1085,8 @@ func breezeRuntime() string {
       ct   = 'application/x-www-form-urlencoded';
     }
 
+    _saveScroll();
+
     fetch(actionUrl.pathname, {
       method:      method,
       credentials: 'same-origin',
@@ -983,7 +1104,8 @@ func breezeRuntime() string {
         }
         var target = getAppTarget();
         swap(target, html);
-        history.pushState({ breezeUrl: actionUrl.pathname }, '', actionUrl.pathname);
+        _cacheRoute(_normalizeUrl(actionUrl.pathname), html);
+        history.pushState({ breezeUrl: actionUrl.pathname, scrollY: 0 }, '', actionUrl.pathname);
         window.scrollTo(0, 0);
         window.dispatchEvent(new CustomEvent('breeze:navigate', { detail: { url: actionUrl.pathname } }));
         _runHooks('afterSubmit', { form: form, url: actionUrl.pathname, html: html });
