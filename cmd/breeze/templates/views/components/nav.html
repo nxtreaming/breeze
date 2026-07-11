@@ -1,0 +1,7 @@
+{{define "nav"}}
+<nav>
+  <a href="/">Home</a>
+  <a href="/about">About</a>
+  {{if .IsPartial}}<!-- partial render -->{{end}}
+</nav>
+{{end}}

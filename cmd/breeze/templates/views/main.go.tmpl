@@ -1,0 +1,37 @@
+package main
+
+import (
+	"fmt"
+	"runtime"
+
+	"github.com/nelthaarion/breeze"
+)
+
+func main() {
+	router := breeze.NewRouter()
+	RegisterGeneratedRoutes(router)
+
+	pool := breeze.NewWorkerPool(runtime.NumCPU())
+	app := breeze.New(router, pool)
+
+	engine := breeze.NewTemplateEngine(breeze.TemplateConfig{
+		ViewsDir:      "./views",
+		ComponentsDir: "./components",
+		LayoutFile:    "./views/layout.html",
+		DevMode:       true,
+	})
+
+	if err := engine.Preload(); err != nil {
+		panic(err)
+	}
+
+	router.EnableReRender(engine)
+
+	router.View("/", engine, "home", nil)
+	router.View("/about", engine, "about", nil)
+
+	router.ServeStatic("/public", "./public")
+
+	fmt.Println("Breeze listening on :3000")
+	app.Run(3000, true)
+}

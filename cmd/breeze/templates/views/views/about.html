@@ -1,0 +1,31 @@
+{{define "content"}}
+<div class="page">
+  <h1>About</h1>
+  <p>Breeze is a high-performance Go HTTP + WebSocket framework built on <code>gnet</code>.</p>
+
+  <h2>Template Engine Features</h2>
+  <ul>
+    <li>SPA navigation — no full-page reloads</li>
+    <li>Views wrap inside a shared layout automatically</li>
+    <li>Components are reusable HTML fragments with data</li>
+    <li>Dev mode for hot-reload during development</li>
+    <li>Template caching in production</li>
+  </ul>
+
+  <h2>How partial rendering works</h2>
+  <p>
+    When the Breeze SPA runtime intercepts a link click it sends the same request
+    with the header <code>X-Breeze-Partial: true</code>. The server detects this
+    and returns only the <code>{{"{{"}}define "content"{{"}}"}}</code> block — no layout, no scripts.
+    The client swaps it into <code>#breeze-app</code> in milliseconds.
+  </p>
+</div>
+
+<style>
+  .page h1 { font-size: 2rem; margin-bottom: .5rem; }
+  .page > p { color: #555; margin: 1rem 0; line-height: 1.7; }
+  .page h2 { font-size: 1.2rem; margin: 1.5rem 0 .5rem; }
+  .page ul { padding-left: 1.5rem; line-height: 2; }
+  code { background: #f0f0f0; border-radius: 4px; padding: 1px 5px; font-family: monospace; }
+</style>
+{{end}}

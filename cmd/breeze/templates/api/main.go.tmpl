@@ -1,0 +1,27 @@
+package main
+
+import (
+	"fmt"
+	"runtime"
+
+	"github.com/nelthaarion/breeze"
+	middleware "github.com/nelthaarion/breeze/middlewares"
+)
+
+func main() {
+	router := breeze.NewRouter()
+	RegisterGeneratedRoutes(router)
+
+	router.Use(middleware.RecoveryMiddleware())
+	router.Use(middleware.LoggingMiddleware())
+
+	router.Handle(breeze.GET, "/", func(ctx *breeze.Context) {
+		ctx.JSON(map[string]string{"status": "ok"})
+	})
+
+	pool := breeze.NewWorkerPool(runtime.NumCPU())
+	app := breeze.New(router, pool)
+
+	fmt.Println("Breeze listening on :3000")
+	app.Run(3000, true)
+}

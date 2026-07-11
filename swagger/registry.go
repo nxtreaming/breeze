@@ -47,7 +47,7 @@ func SetInfo(title, version, description string) {
 // method should be uppercase ("GET", "POST", …).
 // path is the Breeze-style pattern (e.g. "/user/:id").
 func RegisterRoute(method, path string, doc RouteDoc) {
-	if !enabled {
+	if !enabled.Load() {
 		return
 	}
 	entry := routeEntry{
