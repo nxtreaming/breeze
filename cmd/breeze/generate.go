@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"go/token"
+	"io"
+	"os"
 	"strings"
 )
 
@@ -75,21 +78,53 @@ func actionsFor(name, plural string, requested []string) ([]action, error) {
 	return actions, nil
 }
 
-// splitFlagsAndPositional separates "--name=value" (or "-name=value") flag
-// tokens from positional arguments, regardless of order. It requires flags
-// with values to use the "=" form (as breeze's usage text documents) since
-// the stdlib flag package otherwise stops parsing at the first positional
-// token — which would break commands like `breeze new myapp --template=api`
-// or `breeze generate resource User name:string --plural=people`.
-func splitFlagsAndPositional(args []string) (flagArgs, positional []string) {
-	for _, a := range args {
-		if strings.HasPrefix(a, "-") {
-			flagArgs = append(flagArgs, a)
-		} else {
+// splitFlagsAndPositional separates flag tokens from positional arguments,
+// regardless of order, so commands like `breeze generate resource User
+// name:string --plural=people` work (the stdlib flag package alone stops
+// parsing at the first positional token). Both "--name=value" and
+// "--name value" forms are supported: when a token names a non-boolean flag
+// registered on fs and carries no "=", the following token is consumed as
+// its value. Unknown flag tokens are kept so fs.Parse reports them.
+func splitFlagsAndPositional(fs *flag.FlagSet, args []string) (flagArgs, positional []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") {
 			positional = append(positional, a)
+			continue
+		}
+		flagArgs = append(flagArgs, a)
+
+		name := strings.TrimLeft(a, "-")
+		if strings.Contains(name, "=") {
+			continue
+		}
+		f := fs.Lookup(name)
+		if f == nil {
+			continue
+		}
+		if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && bf.IsBoolFlag() {
+			continue
+		}
+		if i+1 < len(args) {
+			i++
+			flagArgs = append(flagArgs, args[i])
 		}
 	}
 	return flagArgs, positional
+}
+
+// parseFlags parses args with fs, returning errors to the caller instead of
+// exiting (flag.ExitOnError would bypass main's error handling). The
+// FlagSet's own output is discarded — main prints the returned error — except
+// for -h/--help, where the flag defaults are printed.
+func parseFlags(fs *flag.FlagSet, args []string) error {
+	fs.SetOutput(io.Discard)
+	err := fs.Parse(args)
+	if errors.Is(err, flag.ErrHelp) {
+		fs.SetOutput(os.Stderr)
+		fs.PrintDefaults()
+	}
+	return err
 }
 
 func parseMethodsFlag(fs *flag.FlagSet) *string {

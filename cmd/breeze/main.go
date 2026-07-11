@@ -42,7 +42,7 @@ func printUsage() {
 
 Usage:
   breeze new <name> [--template=api|views] [--module=<import-path>]
-  breeze generate handler <Name> [--methods=GET,POST,PUT,DELETE] [--force]
+  breeze generate handler <Name> [--methods=list,get,create,update,delete] [--plural=<name>] [--force]
   breeze generate resource <Name> field:type [field:type ...] [--plural=<name>] [--force]
   breeze help
 
@@ -52,7 +52,7 @@ Aliases:
 Examples:
   breeze new myapp
   breeze new myapp --template=views
-  breeze generate handler Session --methods=GET,POST
+  breeze generate handler Session --methods=list,create
   breeze generate resource User name:string email:string age:int
 `)
 }

@@ -21,14 +21,20 @@ func {{.FuncName}}(ctx *breeze.Context) {
 {{end}}`))
 
 func generateHandler(modulePath, name string, args []string) error {
-	fs := flag.NewFlagSet("generate handler", flag.ExitOnError)
+	fs := flag.NewFlagSet("generate handler", flag.ContinueOnError)
 	methods := parseMethodsFlag(fs)
 	force := fs.Bool("force", false, "overwrite an existing handler file")
-	if err := fs.Parse(args); err != nil {
+	pluralOverride := fs.String("plural", "", "override the pluralized handler name (e.g. --plural=people)")
+
+	flagArgs, _ := splitFlagsAndPositional(fs, args)
+	if err := parseFlags(fs, flagArgs); err != nil {
 		return err
 	}
 
-	plural := pluralize(name)
+	plural := *pluralOverride
+	if plural == "" {
+		plural = pluralize(name)
+	}
 	pathBase := "/" + strings.ToLower(plural)
 
 	actions, err := actionsFor(name, plural, splitMethods(*methods))

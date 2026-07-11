@@ -10,15 +10,15 @@ import (
 )
 
 const middlewareImport = `middleware "github.com/nelthaarion/breeze/middlewares"`
-const swaggerImport = `"github.com/nelthaarion/breeze/swagger"`
+const scalarImport = `"github.com/nelthaarion/breeze/scalar"`
 
 func generateResource(modulePath, name string, args []string) error {
-	fs := flag.NewFlagSet("generate resource", flag.ExitOnError)
+	fs := flag.NewFlagSet("generate resource", flag.ContinueOnError)
 	pluralOverride := fs.String("plural", "", "override the pluralized resource name (e.g. --plural=people)")
 	force := fs.Bool("force", false, "overwrite an existing handler file")
 
-	flagArgs, positional := splitFlagsAndPositional(args)
-	if err := fs.Parse(flagArgs); err != nil {
+	flagArgs, positional := splitFlagsAndPositional(fs, args)
+	if err := parseFlags(fs, flagArgs); err != nil {
 		return err
 	}
 
@@ -50,7 +50,7 @@ func generateResource(modulePath, name string, args []string) error {
 		docArgs[i] = routeDoc(a, name, plural, pathBase+a.PathSuffix)
 	}
 
-	return registerActionRoutes(modulePath, name, pathBase, actions, docArgs, middlewareImport, swaggerImport)
+	return registerActionRoutes(modulePath, name, pathBase, actions, docArgs, middlewareImport, scalarImport)
 }
 
 func writeResourceHandlerFile(name, plural string, fields []field, force bool) error {
@@ -68,6 +68,7 @@ func writeResourceHandlerFile(name, plural string, fields []field, force bool) e
 	var b strings.Builder
 	b.WriteString("package handlers\n\n")
 	b.WriteString("import (\n")
+	b.WriteString("\t\"encoding/json\"\n")
 	b.WriteString("\t\"fmt\"\n")
 	b.WriteString("\t\"sync\"\n")
 	if usesTime(fields) {
@@ -89,6 +90,7 @@ func writeResourceHandlerFile(name, plural string, fields []field, force bool) e
 	b.WriteString("\tID string `json:\"id\" description:\"" + name + " ID\"`\n")
 	b.WriteString("}\n\n")
 
+	b.WriteString("// In-memory store for scaffolding only — replace with real persistence\n// before production use.\n")
 	fmt.Fprintf(&b, "var (\n\t%sMu sync.RWMutex\n\t%sStore = []%sResponse{}\n\t%sNextID = 1\n)\n\n",
 		nameLower, nameLower, name, nameLower)
 
@@ -132,17 +134,11 @@ func writeResourceHandlerFile(name, plural string, fields []field, force bool) e
 		nameLower, nameLower, nameLower, nameLower)
 	b.WriteString("\tctx.Status(404)\n\tctx.JSON(map[string]string{\"error\": \"not found\"})\n}\n")
 
-	formatted, err := format.Source([]byte(addJSONImport(b.String())))
+	formatted, err := format.Source([]byte(b.String()))
 	if err != nil {
 		return fmt.Errorf("formatting %s: %w", path, err)
 	}
 	return os.WriteFile(path, formatted, 0o644)
-}
-
-// addJSONImport inserts encoding/json into the import block generated above.
-// Kept separate from the main builder so the import list stays easy to read.
-func addJSONImport(src string) string {
-	return strings.Replace(src, "\t\"fmt\"\n", "\t\"encoding/json\"\n\t\"fmt\"\n", 1)
 }
 
 func writeStruct(b *strings.Builder, typeName string, fields []field) {
@@ -163,52 +159,52 @@ func writeResponseStruct(b *strings.Builder, typeName string, fields []field) {
 }
 
 // routeDoc renders the middleware.DocXXX(...) call for a single action,
-// wiring up swagger.RouteDoc from the generated request/response types.
+// wiring up scalar.RouteDoc from the generated request/response types.
 func routeDoc(a action, name, plural, path string) string {
 	tags := fmt.Sprintf("[]string{%q}", plural)
 	switch a.Name {
 	case "list":
-		return fmt.Sprintf(`middleware.DocGET(%q, swagger.RouteDoc{
+		return fmt.Sprintf(`middleware.DocGET(%q, scalar.RouteDoc{
 	Title:        %q,
 	Tags:         %s,
 	Output:       handlers.%sListResponse{},
 	OutputStatus: 200,
 })`, path, "List "+plural, tags, name)
 	case "get":
-		return fmt.Sprintf(`middleware.DocGET(%q, swagger.RouteDoc{
+		return fmt.Sprintf(`middleware.DocGET(%q, scalar.RouteDoc{
 	Title: %q,
 	Tags:  %s,
-	Input: []swagger.InputGroup{
-		{Type: swagger.InputParams, Fields: handlers.%sPathParams{}},
+	Input: []scalar.InputGroup{
+		{Type: scalar.InputParams, Fields: handlers.%sPathParams{}},
 	},
 	Output: handlers.%sResponse{},
 })`, path, "Get "+name+" by ID", tags, name, name)
 	case "create":
-		return fmt.Sprintf(`middleware.DocPOST(%q, swagger.RouteDoc{
+		return fmt.Sprintf(`middleware.DocPOST(%q, scalar.RouteDoc{
 	Title: %q,
 	Tags:  %s,
-	Input: []swagger.InputGroup{
-		{Type: swagger.InputBody, Fields: handlers.Create%sRequest{}, Required: true},
+	Input: []scalar.InputGroup{
+		{Type: scalar.InputBody, Fields: handlers.Create%sRequest{}, Required: true},
 	},
 	Output:       handlers.%sResponse{},
 	OutputStatus: 201,
 })`, path, "Create "+name, tags, name, name)
 	case "update":
-		return fmt.Sprintf(`middleware.DocPUT(%q, swagger.RouteDoc{
+		return fmt.Sprintf(`middleware.DocPUT(%q, scalar.RouteDoc{
 	Title: %q,
 	Tags:  %s,
-	Input: []swagger.InputGroup{
-		{Type: swagger.InputParams, Fields: handlers.%sPathParams{}},
-		{Type: swagger.InputBody, Fields: handlers.Update%sRequest{}, Required: true},
+	Input: []scalar.InputGroup{
+		{Type: scalar.InputParams, Fields: handlers.%sPathParams{}},
+		{Type: scalar.InputBody, Fields: handlers.Update%sRequest{}, Required: true},
 	},
 	Output: handlers.%sResponse{},
 })`, path, "Update "+name, tags, name, name, name)
 	case "delete":
-		return fmt.Sprintf(`middleware.DocDELETE(%q, swagger.RouteDoc{
+		return fmt.Sprintf(`middleware.DocDELETE(%q, scalar.RouteDoc{
 	Title: %q,
 	Tags:  %s,
-	Input: []swagger.InputGroup{
-		{Type: swagger.InputParams, Fields: handlers.%sPathParams{}},
+	Input: []scalar.InputGroup{
+		{Type: scalar.InputParams, Fields: handlers.%sPathParams{}},
 	},
 	Output:            struct{}{},
 	OutputStatus:      204,

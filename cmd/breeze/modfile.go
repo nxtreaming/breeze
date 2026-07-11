@@ -25,7 +25,15 @@ func currentModulePath() (string, error) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module")), nil
+			path := strings.TrimSpace(strings.TrimPrefix(line, "module"))
+			if idx := strings.Index(path, "//"); idx != -1 {
+				path = strings.TrimSpace(path[:idx])
+			}
+			path = strings.Trim(path, `"`)
+			if path == "" {
+				return "", fmt.Errorf("go.mod has a malformed module directive")
+			}
+			return path, nil
 		}
 	}
 	if err := scanner.Err(); err != nil {

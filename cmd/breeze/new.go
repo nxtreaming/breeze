@@ -23,12 +23,12 @@ type newProjectData struct {
 }
 
 func runNew(args []string) error {
-	flags := flag.NewFlagSet("new", flag.ExitOnError)
+	flags := flag.NewFlagSet("new", flag.ContinueOnError)
 	tmplName := flags.String("template", "api", "project template: api or views")
 	module := flags.String("module", "", "Go module path (defaults to the project name)")
 
-	flagArgs, positional := splitFlagsAndPositional(args)
-	if err := flags.Parse(flagArgs); err != nil {
+	flagArgs, positional := splitFlagsAndPositional(flags, args)
+	if err := parseFlags(flags, flagArgs); err != nil {
 		return err
 	}
 
@@ -63,7 +63,27 @@ func runNew(args []string) error {
 		return err
 	}
 
-	if err := renderTemplateTree(templateFS, templateRoot, name, data); err != nil {
+	// The existence check above guarantees name was created by this run, so
+	// a failed scaffold can safely remove it rather than leave a partial
+	// project behind.
+	if err := populateProject(templateFS, templateRoot, name, modulePath, data); err != nil {
+		os.RemoveAll(name)
+		return err
+	}
+
+	if err := runGoModTidy(name); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: go mod tidy failed: %v\n", err)
+	}
+
+	fmt.Printf("Created %s (template: %s)\n\nNext steps:\n  cd %s\n  go run .\n", name, *tmplName, name)
+	return nil
+}
+
+// renderTree is swappable in tests to exercise runNew's failure cleanup.
+var renderTree = renderTemplateTree
+
+func populateProject(templateFS embed.FS, templateRoot, name, modulePath string, data newProjectData) error {
+	if err := renderTree(templateFS, templateRoot, name, data); err != nil {
 		return err
 	}
 
@@ -75,16 +95,7 @@ func runNew(args []string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Join(name, "handlers"), 0o755); err != nil {
-		return err
-	}
-
-	if err := runGoModTidy(name); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: go mod tidy failed: %v\n", err)
-	}
-
-	fmt.Printf("Created %s (template: %s)\n\nNext steps:\n  cd %s\n  go run .\n", name, *tmplName, name)
-	return nil
+	return os.MkdirAll(filepath.Join(name, "handlers"), 0o755)
 }
 
 // renderTemplateTree walks every file under root in srcFS, rendering it
