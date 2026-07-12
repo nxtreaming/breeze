@@ -1,0 +1,7 @@
+name: "breeze-codeql-config"
+
+queries:
+  - uses: security-and-quality
+
+paths-ignore:
+  - example_template/**

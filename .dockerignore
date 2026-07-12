@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.claude
+docs
+*.md
+diff.txt
+Dockerfile
+docker-compose.yml
+.dockerignore

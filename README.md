@@ -28,6 +28,7 @@ efficiently while keeping your code clean and maintainable.
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Docker](#docker)
 - [CLI — Scaffolding & Code Generation](#-cli--scaffolding--code-generation)
 - [Features](#features)
   - [Built for Extreme Performance](#-built-for-extreme-performance)
@@ -40,6 +41,7 @@ efficiently while keeping your code clean and maintainable.
   - [Performance Optimizations](#-performance-optimizations)
 - [Support the Project](#-support-the-project)
 - [Contributing](#-contributing)
+- [Security Scanning](#-security-scanning)
 - [License](#license)
 
 ## Installation
@@ -96,6 +98,28 @@ Run it:
 go run main.go
 # → curl http://localhost:3000/        → {"status":"ok"}
 # → curl http://localhost:3000/users/42 → {"id":"42"}
+```
+
+## Docker
+
+The repository ships a multi-stage `Dockerfile` and `docker-compose.yml`
+that containerize the example server in `./cmd` (~25 MB image, static
+binary, non-root user, built-in healthcheck):
+
+```bash
+# Plain Docker
+docker build -t breeze-example .
+docker run --rm -p 3000:3000 breeze-example
+
+# Or with Compose
+docker compose up --build
+```
+
+Breeze itself is a library — to containerize your own application, point
+the `BREEZE_TARGET` build argument at any main package in the module:
+
+```bash
+docker build --build-arg BREEZE_TARGET=./cmd/dashboard-example -t my-app .
 ```
 
 ## 🧰 CLI — Scaffolding & Code Generation
@@ -259,6 +283,21 @@ Breeze better.
 
 Please open an issue first for non-trivial changes so we can align on
 the approach before you spend time on code.
+
+## 🔐 Security Scanning
+
+Breeze now includes automated security checks in GitHub Actions:
+
+- **CodeQL** static analysis (`.github/workflows/codeql.yml`)
+- **govulncheck** vulnerability scanning for Go packages and reachable code (`.github/workflows/govulncheck.yml`)
+- **Gitleaks** secret scanning (`.github/workflows/secret-scan.yml`)
+- **Dependabot** weekly updates for Go modules and GitHub Actions (`.github/dependabot.yml`)
+
+For repository admins:
+
+- Enable GitHub Advanced Security **secret scanning** and **push protection** in repository settings when available.
+- Configure branch protection to require the three security workflow checks before merge.
+- Use the triage process in `.github/SECURITY_TRIAGE.md` to classify and resolve alerts.
 
 ## License
 

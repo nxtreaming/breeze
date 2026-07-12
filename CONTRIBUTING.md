@@ -72,6 +72,29 @@ git push origin feature/my-feature
 
 ---
 
+## Security Scanning
+
+The repository runs automated security checks on pushes, pull requests, and weekly schedules:
+
+- **CodeQL** for static analysis
+- **govulncheck** for Go vulnerability detection
+- **Gitleaks** for secret scanning
+- **Dependabot** for weekly dependency updates
+
+When a security check fails:
+
+1. Reproduce and fix the issue in your branch.
+2. Re-run `go test ./...` locally.
+3. Push the fix and ensure all security checks pass.
+
+For maintainers:
+
+- Enable GitHub secret scanning and push protection when your plan supports it.
+- Require `CodeQL / Analyze`, `govulncheck / Scan dependencies and code`, and `Secret Scan / Gitleaks` in branch protection rules.
+- Follow `.github/SECURITY_TRIAGE.md` for severity and response expectations.
+
+---
+
 ## Commit Convention
 
 Please use Conventional Commits.

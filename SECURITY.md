@@ -18,3 +18,14 @@ Include:
 - Proof of Concept (if available)
 
 We will investigate the report as quickly as possible.
+
+## Automated Security Monitoring
+
+This repository uses:
+
+- CodeQL analysis for static security findings
+- govulncheck for Go vulnerability detection
+- Gitleaks for secret scanning in Git history
+- Dependabot for dependency update PRs
+
+Maintainers should also enable GitHub secret scanning and push protection in repository settings when available, and require security checks in branch protection rules.
