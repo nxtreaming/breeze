@@ -320,3 +320,62 @@ func TestHandleDBTableUpdate(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleDBTableDelete(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.AllowWrites = true
+		c := newCollector(cfg, nil)
+		c.SetDBInspector(&mockInspector{})
+		c.SetDBWriter(&mockWriter{})
+
+		ctx := breeze.NewContext(breeze.DELETE, "/api/db/tables/users/rows/id=1")
+		ctx.SetParam("name", "users")
+		ctx.SetParam("pk", "id=1")
+
+		c.handleDBTableDelete(ctx)
+
+		if ctx.Res.Status != 204 {
+			t.Fatalf("Status = %d, want 204; body=%s", ctx.Res.Status, ctx.Res.Body)
+		}
+		if len(ctx.Res.Body) != 0 {
+			t.Errorf("Body = %q, want empty for 204", ctx.Res.Body)
+		}
+	})
+
+	t.Run("row not found", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.AllowWrites = true
+		c := newCollector(cfg, nil)
+		c.SetDBInspector(&mockInspector{})
+		c.SetDBWriter(&mockWriter{deleteErr: ErrRowNotFound})
+
+		ctx := breeze.NewContext(breeze.DELETE, "/api/db/tables/users/rows/id=999")
+		ctx.SetParam("name", "users")
+		ctx.SetParam("pk", "id=999")
+
+		c.handleDBTableDelete(ctx)
+
+		if ctx.Res.Status != 404 {
+			t.Fatalf("Status = %d, want 404", ctx.Res.Status)
+		}
+	})
+
+	t.Run("writes disabled", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.AllowWrites = false
+		c := newCollector(cfg, nil)
+		c.SetDBInspector(&mockInspector{})
+		c.SetDBWriter(&mockWriter{})
+
+		ctx := breeze.NewContext(breeze.DELETE, "/api/db/tables/users/rows/id=1")
+		ctx.SetParam("name", "users")
+		ctx.SetParam("pk", "id=1")
+
+		c.handleDBTableDelete(ctx)
+
+		if ctx.Res.Status != 403 {
+			t.Fatalf("Status = %d, want 403", ctx.Res.Status)
+		}
+	})
+}

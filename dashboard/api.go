@@ -199,6 +199,7 @@ func (c *Collector) registerRoutes(router *breeze.Router, app *breeze.Breeze) {
                 router.Handle(breeze.GET, api+"/db/tables/:name", c.wrap(auth, c.handleDBTableData))
                 router.Handle(breeze.POST, api+"/db/tables/:name/rows", c.wrap(auth, c.handleDBTableInsert))
                 router.Handle(breeze.PUT, api+"/db/tables/:name/rows/:pk", c.wrap(auth, c.handleDBTableUpdate))
+                router.Handle(breeze.DELETE, api+"/db/tables/:name/rows/:pk", c.wrap(auth, c.handleDBTableDelete))
 
         // ── WebSocket endpoint for real-time updates ──────────────────────────
         if app != nil {
@@ -552,6 +553,29 @@ func (c *Collector) handleDBTableUpdate(ctx *breeze.Context) {
         c.invalidateTableCache(table)
         c.RecordLog("app", LogEntry{Time: now(), Message: fmt.Sprintf("db write: update %s", table)})
         ctx.JSON(map[string]any{"ok": true})
+}
+
+func (c *Collector) handleDBTableDelete(ctx *breeze.Context) {
+        table := ctx.Param("name")
+        writer, ok := c.writableGuard(ctx, table)
+        if !ok {
+                return
+        }
+        pk := parsePK(ctx.Param("pk"))
+        err := writer.DeleteRow(table, pk)
+        if errors.Is(err, ErrRowNotFound) {
+                ctx.Status(404)
+                ctx.JSON(map[string]any{"error": "row not found"})
+                return
+        }
+        if err != nil {
+                ctx.Status(400)
+                ctx.JSON(map[string]any{"error": err.Error()})
+                return
+        }
+        c.invalidateTableCache(table)
+        c.RecordLog("app", LogEntry{Time: now(), Message: fmt.Sprintf("db write: delete from %s", table)})
+        ctx.Status(204)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
