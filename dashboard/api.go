@@ -196,6 +196,7 @@ func (c *Collector) registerRoutes(router *breeze.Router, app *breeze.Breeze) {
         router.Handle(breeze.GET, api+"/architecture", c.wrap(auth, c.handleArchitecture))
                 router.Handle(breeze.GET, api+"/db/tables", c.wrap(auth, c.handleDBTables))
                 router.Handle(breeze.GET, api+"/db/tables/:name", c.wrap(auth, c.handleDBTableData))
+                router.Handle(breeze.POST, api+"/db/tables/:name/rows", c.wrap(auth, c.handleDBTableInsert))
 
         // ── WebSocket endpoint for real-time updates ──────────────────────────
         if app != nil {
@@ -460,6 +461,66 @@ func (c *Collector) handleDBTableData(ctx *breeze.Context) {
         ctx.JSON(data)
 }
 
+// writableGuard checks that the Database Browser's write path is enabled
+// (Config.AllowWrites + a configured DBWriter) and that table is a table
+// the inspector actually reports, so writes can't target an unlisted or
+// hand-crafted table name. On failure it writes the appropriate error
+// response to ctx and returns ok=false; callers must return immediately.
+func (c *Collector) writableGuard(ctx *breeze.Context, table string) (DBWriter, bool) {
+        if !c.cfg.AllowWrites {
+                ctx.Status(403)
+                ctx.JSON(map[string]any{"error": "writes are not enabled"})
+                return nil, false
+        }
+        writer := c.DBWriter()
+        inspector := c.DBInspector()
+        if writer == nil || inspector == nil {
+                ctx.Status(403)
+                ctx.JSON(map[string]any{"error": "writes are not enabled"})
+                return nil, false
+        }
+        tables, err := inspector.Tables()
+        if err != nil {
+                ctx.Status(500)
+                ctx.JSON(map[string]any{"error": err.Error()})
+                return nil, false
+        }
+        for _, t := range tables {
+                if t.Name == table {
+                        return writer, true
+                }
+        }
+        ctx.Status(400)
+        ctx.JSON(map[string]any{"error": "unknown table: " + table})
+        return nil, false
+}
+
+func (c *Collector) handleDBTableInsert(ctx *breeze.Context) {
+        table := ctx.Param("name")
+        writer, ok := c.writableGuard(ctx, table)
+        if !ok {
+                return
+        }
+        var req struct {
+                Values map[string]any `json:"values"`
+        }
+        if err := jsonUnmarshal(ctx.Req.Body, &req); err != nil {
+                ctx.Status(400)
+                ctx.JSON(map[string]any{"error": "invalid request body"})
+                return
+        }
+        row, err := writer.InsertRow(table, req.Values)
+        if err != nil {
+                ctx.Status(400)
+                ctx.JSON(map[string]any{"error": err.Error()})
+                return
+        }
+        c.invalidateTableCache(table)
+        c.RecordLog("app", LogEntry{Time: now(), Message: fmt.Sprintf("db write: insert into %s", table)})
+        ctx.Status(201)
+        ctx.JSON(row)
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 func atoiDefault(s string, def int) int {
@@ -651,5 +712,3 @@ func buildPerfMetrics(c *Collector) PerfMetrics {
         }
 }
 
-// dummy use of fmt to keep the import alive when handlers are simplified later.
-var _ = fmt.Sprintf

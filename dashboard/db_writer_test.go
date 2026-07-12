@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"encoding/json"
+	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/nelthaarion/breeze"
@@ -122,4 +124,121 @@ func TestParsePK(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestHandleDBTableInsert(t *testing.T) {
+	newCollectorWithWriter := func(allowWrites bool, writer DBWriter) *Collector {
+		cfg := DefaultConfig()
+		cfg.AllowWrites = allowWrites
+		c := newCollector(cfg, nil)
+		c.SetDBInspector(&mockInspector{})
+		if writer != nil {
+			c.SetDBWriter(writer)
+		}
+		return c
+	}
+
+	t.Run("success", func(t *testing.T) {
+		c := newCollectorWithWriter(true, &mockWriter{})
+		ctx := breeze.NewContext(breeze.POST, "/api/db/tables/users/rows")
+		ctx.SetParam("name", "users")
+		ctx.Req.Body = []byte(`{"values":{"name":"Alice"}}`)
+
+		c.handleDBTableInsert(ctx)
+
+		if ctx.Res.Status != 201 {
+			t.Fatalf("Status = %d, want 201; body=%s", ctx.Res.Status, ctx.Res.Body)
+		}
+		var row map[string]any
+		if err := json.Unmarshal(ctx.Res.Body, &row); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if row["name"] != "Alice" {
+			t.Errorf("row[name] = %v, want Alice", row["name"])
+		}
+	})
+
+	t.Run("writes disabled", func(t *testing.T) {
+		c := newCollectorWithWriter(false, &mockWriter{})
+		ctx := breeze.NewContext(breeze.POST, "/api/db/tables/users/rows")
+		ctx.SetParam("name", "users")
+		ctx.Req.Body = []byte(`{"values":{"name":"Alice"}}`)
+
+		c.handleDBTableInsert(ctx)
+
+		if ctx.Res.Status != 403 {
+			t.Fatalf("Status = %d, want 403", ctx.Res.Status)
+		}
+	})
+
+	t.Run("no writer configured", func(t *testing.T) {
+		c := newCollectorWithWriter(true, nil)
+		ctx := breeze.NewContext(breeze.POST, "/api/db/tables/users/rows")
+		ctx.SetParam("name", "users")
+		ctx.Req.Body = []byte(`{"values":{"name":"Alice"}}`)
+
+		c.handleDBTableInsert(ctx)
+
+		if ctx.Res.Status != 403 {
+			t.Fatalf("Status = %d, want 403", ctx.Res.Status)
+		}
+	})
+
+	t.Run("unknown table", func(t *testing.T) {
+		c := newCollectorWithWriter(true, &mockWriter{})
+		ctx := breeze.NewContext(breeze.POST, "/api/db/tables/ghost/rows")
+		ctx.SetParam("name", "ghost")
+		ctx.Req.Body = []byte(`{"values":{"name":"Alice"}}`)
+
+		c.handleDBTableInsert(ctx)
+
+		if ctx.Res.Status != 400 {
+			t.Fatalf("Status = %d, want 400", ctx.Res.Status)
+		}
+	})
+
+	t.Run("writer error", func(t *testing.T) {
+		c := newCollectorWithWriter(true, &mockWriter{insertErr: errors.New("constraint violation")})
+		ctx := breeze.NewContext(breeze.POST, "/api/db/tables/users/rows")
+		ctx.SetParam("name", "users")
+		ctx.Req.Body = []byte(`{"values":{"name":"Alice"}}`)
+
+		c.handleDBTableInsert(ctx)
+
+		if ctx.Res.Status != 400 {
+			t.Fatalf("Status = %d, want 400", ctx.Res.Status)
+		}
+	})
+
+	t.Run("cache invalidated and log recorded on success", func(t *testing.T) {
+		mock := &mockInspector{}
+		cfg := DefaultConfig()
+		cfg.AllowWrites = true
+		c := newCollector(cfg, nil)
+		c.SetDBInspector(mock)
+		c.SetDBWriter(&mockWriter{})
+
+		// Prime the cache for "users".
+		ins := c.DBInspector()
+		_, _ = ins.TableData("users", 1, 50, "")
+		if calls := atomic.LoadInt32(&mock.dataCalls); calls != 1 {
+			t.Fatalf("dataCalls = %d, want 1 after priming cache", calls)
+		}
+
+		ctx := breeze.NewContext(breeze.POST, "/api/db/tables/users/rows")
+		ctx.SetParam("name", "users")
+		ctx.Req.Body = []byte(`{"values":{"name":"Alice"}}`)
+		c.handleDBTableInsert(ctx)
+
+		// A subsequent read must miss the cache (it was invalidated).
+		_, _ = ins.TableData("users", 1, 50, "")
+		if calls := atomic.LoadInt32(&mock.dataCalls); calls != 2 {
+			t.Errorf("dataCalls = %d, want 2 (cache should have been invalidated)", calls)
+		}
+
+		logs := c.Logs("app", 0)
+		if len(logs) != 1 {
+			t.Fatalf("Logs(app) = %d entries, want 1", len(logs))
+		}
+	})
 }
