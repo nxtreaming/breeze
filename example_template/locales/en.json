@@ -1,0 +1,11 @@
+{
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "users": "Users"
+  },
+  "home": {
+    "title": "Welcome to Breeze 🌊",
+    "subtitle": "SPA navigation, live fragments, server-rendered components, and form handling."
+  }
+}

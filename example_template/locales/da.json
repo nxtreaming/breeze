@@ -1,0 +1,11 @@
+{
+  "nav": {
+    "home": "Hjem",
+    "about": "Om",
+    "users": "Brugere"
+  },
+  "home": {
+    "title": "Velkommen til Breeze 🌊",
+    "subtitle": "SPA-navigation, live-fragmenter, server-renderede komponenter og formularhåndtering."
+  }
+}

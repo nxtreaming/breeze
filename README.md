@@ -46,7 +46,7 @@ efficiently while keeping your code clean and maintainable.
 
 ## Installation
 
-Requires **Go 1.24.3** or later.
+Requires **Go 1.25.12** or later.
 
 ```bash
 go get github.com/nelthaarion/breeze

@@ -1,5 +1,5 @@
 {{define "layout"}}<!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Locale}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +10,8 @@
     nav { background: #1a1a2e; padding: 1rem 2rem; display: flex; gap: 1.5rem; }
     nav a { color: #eee; text-decoration: none; font-weight: 500; transition: color .2s; }
     nav a:hover { color: #7c83fd; }
+    .lang-switch { margin-left: auto; display: flex; gap: .5rem; }
+    .lang-switch a { opacity: .7; font-size: .85rem; }
     #breeze-app { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
     .loading { opacity: 0.5; transition: opacity .15s; }
   </style>

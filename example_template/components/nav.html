@@ -1,8 +1,12 @@
 {{define "nav"}}
 <nav>
-  <a href="/">Home</a>
-  <a href="/about">About</a>
-  <a href="/users">Users</a>
+  <a href="/">{{t "nav.home"}}</a>
+  <a href="/about">{{t "nav.about"}}</a>
+  <a href="/users">{{t "nav.users"}}</a>
+  <span class="lang-switch">
+    <a href="?lang=en">EN</a>
+    <a href="?lang=da">DA</a>
+  </span>
   {{if .IsPartial}}<!-- partial render -->{{end}}
 </nav>
 {{end}}

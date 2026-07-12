@@ -1,6 +1,6 @@
 module github.com/nelthaarion/breeze
 
-go 1.24.3
+go 1.25.12
 
 require (
 	github.com/goccy/go-json v0.10.6
