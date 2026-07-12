@@ -14,7 +14,7 @@
 
 - Go 1.24.3 or later (per README.md "Installation").
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`) per CONTRIBUTING.md.
-- Run `gofmt -w` on every modified `.go` file before committing; `gofmt -l .` must report nothing.
+- **Formatting:** the pre-existing repo files this plan touches (`dashboard/api.go`, `dashboard/collector.go`, `dashboard/config.go`, `dashboard/db_inspector.go`, `dashboard/types.go`, `dashboard/cached_inspector_test.go`, `dashboard/spajavascript.go`, `cmd/dashboard-example/main.go`) are **not** gofmt-clean on `main` (confirmed: `gofmt -l` flags them; the repo uses space indentation, not gofmt's tabs). Do **not** run `gofmt -w` on any of them — it reformats the entire file and buries the real diff under 500+ lines of unrelated whitespace noise. When editing these files, hand-match the surrounding block's existing indentation exactly (copy the whitespace style you see in the Read output). `gofmt -w` IS expected on the two files this plan creates from scratch (`dashboard/db_writer.go`, `dashboard/db_writer_test.go`) — they have no pre-existing style to clash with. Run `gofmt -l <file>` after any edit to confirm you haven't reformatted more than you intended (a pre-existing file should still show up in `gofmt -l` afterward — that's expected, not a bug).
 - No changes to the existing `DBInspector`, `TableInfo`, or `TableColumn` types — public API backward compatibility is required (CONTRIBUTING.md: "Keep public APIs backward compatible whenever possible").
 - No new external Go dependencies. No new frontend dependencies (dashboard SPA is "single-file, no external deps" per `dashboard/README.md`).
 - `go vet ./...` and `go test ./...` must pass before every commit (matches `.github/workflows/ci.yml`).
@@ -189,7 +189,7 @@ No change is needed in `withDefaults()` — Go's zero value for `bool` is alread
 
 - [ ] **Step 6: Run gofmt and the test again**
 
-Run: `gofmt -w dashboard/db_writer.go dashboard/db_writer_test.go dashboard/collector.go dashboard/config.go`
+Run: `gofmt -w dashboard/db_writer.go dashboard/db_writer_test.go` (these are the only new files — do not gofmt `collector.go` or `config.go`; hand-match their existing space-indentation for the inserted blocks, per Global Constraints).
 Run: `go test ./dashboard/... -run 'TestSetDBWriter_Nil|TestConfigAllowWritesDefaultsFalse' -v`
 Expected: `ok` — both tests PASS.
 
@@ -301,7 +301,7 @@ func (c *Collector) invalidateTableCache(table string) {
 
 - [ ] **Step 5: Run gofmt and the test again**
 
-Run: `gofmt -w dashboard/db_inspector.go dashboard/collector.go dashboard/cached_inspector_test.go`
+Do NOT run `gofmt -w` here — `db_inspector.go`, `collector.go`, and `cached_inspector_test.go` are all pre-existing files that are not gofmt-clean on `main` (see Global Constraints). Hand-match the surrounding indentation for your inserted code instead.
 Run: `go test ./dashboard/... -run TestCachedInspector_Invalidate -v`
 Expected: PASS.
 
@@ -439,7 +439,7 @@ func (c *Collector) handleDBTableData(ctx *breeze.Context) {
 
 - [ ] **Step 5: Run gofmt and the test again**
 
-Run: `gofmt -w dashboard/types.go dashboard/api.go dashboard/db_writer_test.go`
+Run: `gofmt -w dashboard/db_writer_test.go` only (it's one of this plan's own new files, already gofmt-clean, so re-running is safe). Do NOT run `gofmt -w` on `types.go` or `api.go` — both are pre-existing and not gofmt-clean on `main`; hand-match their surrounding indentation instead.
 Run: `go test ./dashboard/... -run TestHandleDBTableData_WritableFlag -v`
 Expected: all 4 subtests PASS.
 
@@ -817,7 +817,7 @@ var _ = fmt.Sprintf
 
 - [ ] **Step 7: Run gofmt and the test again**
 
-Run: `gofmt -w dashboard/api.go dashboard/db_writer_test.go`
+Run: `gofmt -w dashboard/db_writer_test.go` only (it's one of this plan's own new files, already gofmt-clean, so re-running is safe). Do NOT run `gofmt -w` on `api.go` — it's pre-existing and not gofmt-clean on `main`; hand-match its surrounding indentation instead.
 Run: `go test ./dashboard/... -run TestHandleDBTableInsert -v`
 Expected: all 6 subtests PASS.
 
@@ -981,7 +981,7 @@ In `registerRoutes`, immediately after the `POST .../rows` route added in Task 5
 
 - [ ] **Step 5: Run gofmt and the test again**
 
-Run: `gofmt -w dashboard/api.go dashboard/db_writer_test.go`
+Run: `gofmt -w dashboard/db_writer_test.go` only (it's one of this plan's own new files, already gofmt-clean, so re-running is safe). Do NOT run `gofmt -w` on `api.go` — it's pre-existing and not gofmt-clean on `main`; hand-match its surrounding indentation instead.
 Run: `go test ./dashboard/... -run TestHandleDBTableUpdate -v`
 Expected: all 4 subtests PASS.
 
@@ -1118,7 +1118,7 @@ In `registerRoutes`, immediately after the `PUT .../rows/:pk` route added in Tas
 
 - [ ] **Step 5: Run gofmt and the test again**
 
-Run: `gofmt -w dashboard/api.go dashboard/db_writer_test.go`
+Run: `gofmt -w dashboard/db_writer_test.go` only (it's one of this plan's own new files, already gofmt-clean, so re-running is safe). Do NOT run `gofmt -w` on `api.go` — it's pre-existing and not gofmt-clean on `main`; hand-match its surrounding indentation instead.
 Run: `go test ./dashboard/... -run TestHandleDBTableDelete -v`
 Expected: all 3 subtests PASS.
 
@@ -1307,7 +1307,7 @@ function saveNewDBRow(){
 
 - [ ] **Step 3: Compile-check the Go file**
 
-Run: `gofmt -w dashboard/spajavascript.go && go build ./...`
+Do NOT run `gofmt -w` on `spajavascript.go` — it's pre-existing, not gofmt-clean on `main`, and (since the whole file is one JS-in-a-Go-string-literal) reformatting it would also rewrite JavaScript indentation inside the string, which is not what you want. Just run: `go build ./...`
 Expected: builds cleanly (the JS lives inside a Go string literal — this only catches Go-level syntax errors like an unterminated string, not JS bugs).
 
 - [ ] **Step 4: Commit**
@@ -1612,8 +1612,8 @@ git commit -m "docs(dashboard): document DBWriter and the editable Database Brow
 ## Final verification
 
 - [ ] Run the full suite one more time from repo root: `go vet ./... && go test ./... -v 2>&1 | tail -80`
-- [ ] Run `gofmt -l .` — expect empty output (no unformatted files).
-- [ ] Confirm branch `feat/editable-database-browser` has 10 focused commits (one per task above, in order), each with a Conventional Commits message.
+- [ ] Run `gofmt -l dashboard/db_writer.go dashboard/db_writer_test.go` — expect empty output. (Do not run bare `gofmt -l .`: several pre-existing repo files are not gofmt-clean on `main` independent of this work — see Global Constraints — so it will always report them.)
+- [ ] Confirm branch `feat/admin` has 10 focused commits (one per task above, in order), each with a Conventional Commits message.
 - [ ] Re-read `docs/superpowers/specs/2026-07-12-editable-database-browser-design.md` end to end and confirm every section (Architecture, Data flow, Frontend, Error handling, Testing, Backward compatibility) is implemented — see the Spec Coverage table below.
 
 **Spec coverage:**
