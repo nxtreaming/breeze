@@ -1,6 +1,10 @@
 package dashboard
 
-import "errors"
+import (
+	"errors"
+	"net/url"
+	"strings"
+)
 
 // DBWriter provides write access to database tables for the Database
 // Browser's Create/Update/Delete UI. It is deliberately separate from
@@ -31,3 +35,31 @@ type DBWriter interface {
 // ErrRowNotFound is returned by DBWriter.UpdateRow/DeleteRow when pk does
 // not match any existing row.
 var ErrRowNotFound = errors.New("dashboard: row not found")
+
+// parsePK parses a URL path segment of the form "col1=val1,col2=val2" into
+// a primary-key map for DBWriter.UpdateRow/DeleteRow. Each key and value
+// is percent-decoded independently, so callers building the URL (see the
+// frontend's pkPathFor in dashboard/spajavascript.go) must
+// encodeURIComponent each key and value before joining them. Malformed
+// pairs (missing "=", undecodable escapes) are silently skipped rather
+// than erroring — DBWriter implementations naturally reject an incomplete
+// pk via ErrRowNotFound when the row can't be found.
+func parsePK(raw string) map[string]any {
+	pk := make(map[string]any)
+	if raw == "" {
+		return pk
+	}
+	for _, pair := range strings.Split(raw, ",") {
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		key, err1 := url.QueryUnescape(kv[0])
+		val, err2 := url.QueryUnescape(kv[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		pk[key] = val
+	}
+	return pk
+}

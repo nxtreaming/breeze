@@ -100,3 +100,26 @@ func TestHandleDBTableData_WritableFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestParsePK(t *testing.T) {
+	cases := []struct {
+		in   string
+		want map[string]any
+	}{
+		{"", map[string]any{}},
+		{"id=42", map[string]any{"id": "42"}},
+		{"a=1,b=2", map[string]any{"a": "1", "b": "2"}},
+		{"name=John%20Doe", map[string]any{"name": "John Doe"}},
+	}
+	for _, c := range cases {
+		got := parsePK(c.in)
+		if len(got) != len(c.want) {
+			t.Fatalf("parsePK(%q) = %v, want %v", c.in, got, c.want)
+		}
+		for k, v := range c.want {
+			if got[k] != v {
+				t.Errorf("parsePK(%q)[%q] = %v, want %v", c.in, k, got[k], v)
+			}
+		}
+	}
+}
