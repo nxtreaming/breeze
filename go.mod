@@ -4,16 +4,16 @@ go 1.24.3
 
 require (
 	github.com/goccy/go-json v0.10.5
-	github.com/panjf2000/gnet/v2 v2.9.4
+	github.com/panjf2000/gnet/v2 v2.10.0
 )
 
 require (
 	github.com/andybalholm/brotli v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
-	github.com/panjf2000/ants/v2 v2.11.3 // indirect
+	github.com/panjf2000/ants/v2 v2.12.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
+	go.uber.org/zap v1.28.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
