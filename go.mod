@@ -3,7 +3,7 @@ module github.com/nelthaarion/breeze
 go 1.24.3
 
 require (
-	github.com/goccy/go-json v0.10.5
+	github.com/goccy/go-json v0.10.6
 	github.com/panjf2000/gnet/v2 v2.10.0
 )
 
