@@ -20,7 +20,9 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -103,6 +105,132 @@ func (s *UserStore) Count() int {
 	return len(s.users)
 }
 
+// ─── dashboard.DBInspector / dashboard.DBWriter ────────────────────────────
+//
+// This is what wires the Database Browser's "users" table view. In a real
+// app you'd implement these against your actual database/ORM instead of an
+// in-memory map.
+
+func (s *UserStore) Tables() ([]dashboard.TableInfo, error) {
+	return []dashboard.TableInfo{{Name: "users", Rows: int64(s.Count())}}, nil
+}
+
+func (s *UserStore) TableData(name string, page, pageSize int, search string) (dashboard.TableData, error) {
+	if name != "users" {
+		return dashboard.TableData{}, fmt.Errorf("unknown table: %s", name)
+	}
+	s.mu.RLock()
+	all := make([]*User, 0, len(s.users))
+	for _, u := range s.users {
+		all = append(all, u)
+	}
+	s.mu.RUnlock()
+
+	sort.Slice(all, func(i, j int) bool { return all[i].ID < all[j].ID })
+
+	if search != "" {
+		q := strings.ToLower(search)
+		filtered := all[:0]
+		for _, u := range all {
+			if strings.Contains(strings.ToLower(u.Name), q) || strings.Contains(strings.ToLower(u.Email), q) {
+				filtered = append(filtered, u)
+			}
+		}
+		all = filtered
+	}
+
+	total := int64(len(all))
+	start := (page - 1) * pageSize
+	if start > len(all) {
+		start = len(all)
+	}
+	end := start + pageSize
+	if end > len(all) {
+		end = len(all)
+	}
+
+	rows := make([]map[string]any, 0, end-start)
+	for _, u := range all[start:end] {
+		rows = append(rows, map[string]any{
+			"id":         u.ID,
+			"name":       u.Name,
+			"email":      u.Email,
+			"created_at": u.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return dashboard.TableData{
+		Table:    name,
+		Page:     page,
+		PageSize: pageSize,
+		Total:    total,
+		Columns: []dashboard.TableColumn{
+			{Name: "id", Type: "int", PrimaryKey: true},
+			{Name: "name", Type: "string"},
+			{Name: "email", Type: "string"},
+			{Name: "created_at", Type: "datetime"},
+		},
+		Rows: rows,
+	}, nil
+}
+
+func (s *UserStore) InsertRow(table string, values map[string]any) (map[string]any, error) {
+	if table != "users" {
+		return nil, fmt.Errorf("unknown table: %s", table)
+	}
+	name, _ := values["name"].(string)
+	email, _ := values["email"].(string)
+	if name == "" || email == "" {
+		return nil, fmt.Errorf("name and email are required")
+	}
+	u := s.Create(name, email)
+	return map[string]any{
+		"id":         u.ID,
+		"name":       u.Name,
+		"email":      u.Email,
+		"created_at": u.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *UserStore) UpdateRow(table string, pk map[string]any, values map[string]any) error {
+	if table != "users" {
+		return fmt.Errorf("unknown table: %s", table)
+	}
+	idStr, _ := pk["id"].(string)
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return dashboard.ErrRowNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[id]
+	if !ok {
+		return dashboard.ErrRowNotFound
+	}
+	if v, ok := values["name"].(string); ok && v != "" {
+		u.Name = v
+	}
+	if v, ok := values["email"].(string); ok && v != "" {
+		u.Email = v
+	}
+	return nil
+}
+
+func (s *UserStore) DeleteRow(table string, pk map[string]any) error {
+	if table != "users" {
+		return fmt.Errorf("unknown table: %s", table)
+	}
+	idStr, _ := pk["id"].(string)
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return dashboard.ErrRowNotFound
+	}
+	if !s.Delete(id) {
+		return dashboard.ErrRowNotFound
+	}
+	return nil
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────
 
 func main() {
@@ -121,8 +249,11 @@ func main() {
 	//   cfg.GOMEMLIMIT = 1024 * 1024 * 1024  // 1 GB limit
 	//   cfg.GOGC = 100                        // Go default (less aggressive GC)
 	cfg := dashboard.DefaultConfig()
+	cfg.AllowWrites = true // demonstrates the editable Database Browser; leave false in production unless intended
 
 	coll := dashboard.Install(app, router, cfg)
+	coll.SetDBInspector(store)
+	coll.SetDBWriter(store)
 
 	// Install the instrumentation middleware so every request is captured.
 	// This MUST come before your application routes.
