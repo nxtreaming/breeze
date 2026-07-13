@@ -931,7 +931,7 @@ function onDBCellBlur(e){
   var col = cell.dataset.col;
   var row = S.dbData.rows[ri];
   var newVal = cell.textContent;
-  if(row[col]!=null && String(row[col])===newVal) return;
+  if((row[col]==null ? '' : String(row[col]))===newVal) return;
   var t = S.dbTables[S.dbTableSel];
   var pk = pkPathFor(row, S.dbData.columns);
   var values = {}; values[col] = newVal;
