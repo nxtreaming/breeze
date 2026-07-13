@@ -440,7 +440,7 @@ func (te *TemplateEngine) execView(
 	html := buf.String()
 	injection := breezeDataScript(dataJSON) + breezeTemplateScript(tmplSources) +
 		te.breezeI18nScript(locale) + breezeRuntime()
-	if idx := strings.LastIndex(html, "</body>"); idx != -1 {
+	if loc := bodyOpenTag.FindStringIndex(html); loc != nil {
 		buf.Reset()
 		buf.WriteString(html[:loc[1]])
 		buf.WriteString(injection)
@@ -1381,6 +1381,38 @@ func breezeRuntime() string {
   function _notifyWatchers(data) {
     for (var i = 0; i < _watchers.length; i++) {
       try { _watchers[i](data); } catch(e) { console.error('breeze.watch callback error', e); }
+    }
+  }
+
+  // Called by swap() after every fragment insert (navigation, breeze.fetch,
+  // poll, render, form submit). If the fragment carries fresh
+  // __breeze_data__ / __breeze_i18n__ / __breeze_tmpl__ tags — every view
+  // now embeds these, see execView on the server — the corresponding
+  // client-side caches are dropped and the store is rehydrated from the
+  // new tag. Previously these tags were only ever injected into full page
+  // loads and lived outside #breeze-app, so breeze.data() silently froze
+  // at whatever the very first page load contained and never reflected
+  // the route actually on screen after an SPA navigation.
+  function _refreshStateTags(el) {
+    var sawData = false;
+    ['__breeze_data__', '__breeze_i18n__', '__breeze_tmpl__'].forEach(function (id) {
+      var fresh = el.querySelector('#' + id);
+      if (!fresh) return;
+      var existing = document.getElementById(id);
+      if (existing && existing !== fresh) existing.parentNode.removeChild(existing);
+      // Relocate to <body> so exactly one canonical instance exists and it
+      // survives later swaps that don't happen to touch this tag.
+      document.body.appendChild(fresh);
+      if (id === '__breeze_data__') sawData = true;
+    });
+
+    _i18nCache = null;
+    _tmplCache = null;
+
+    if (sawData) {
+      _store = _makeReactive(_readDataTag(), _onStoreChange);
+      _notifyWatchers(_store);
+      _renderBindings();
     }
   }
 
