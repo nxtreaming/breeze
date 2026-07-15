@@ -89,3 +89,17 @@ func (c *cachedDBInspector) TableData(name string, page, pageSize int, search st
 
 	return data, err
 }
+
+// Invalidate clears cached TableData pages for the given table, forcing
+// the next read to hit the underlying inspector. It does not affect the
+// cached Tables() result (row counts may lag up to the cache TTL after a
+// write — the same staleness the read path already tolerates).
+func (c *cachedDBInspector) Invalidate(table string) {
+	c.dataMu.Lock()
+	defer c.dataMu.Unlock()
+	for key := range c.data {
+		if key.name == table {
+			delete(c.data, key)
+		}
+	}
+}

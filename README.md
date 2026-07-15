@@ -216,7 +216,7 @@ Supported field types: `string`, `int`, `int64`, `float64`, `bool`, `time.Time`.
 - 🛣 Routes Explorer with per-route latency stats
 - 🧪 API Explorer with multi-language code generation (curl / Go / JS / Python / C# / PHP)
 - 📡 Live Requests feed with WebSocket push
-- 🗄 Database Browser (read-only, paginated)
+- 🗄 Database Browser (paginated; optional inline Create/Update/Delete via `DBWriter`)
 - 🔍 ORM Query Monitor with slow-query detection
 - 💾 Cache, Queue, and Scheduler monitors
 - 📝 Logs with five tabs (App / HTTP / Errors / Panics / Warnings)

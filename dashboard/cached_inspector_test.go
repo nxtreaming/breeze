@@ -134,3 +134,39 @@ func TestSetDBInspector_Nil(t *testing.T) {
 		t.Fatal("inspector not cleared")
 	}
 }
+
+// TestCachedInspector_Invalidate verifies that Invalidate(table) clears
+// only that table's cached TableData pages, leaving other tables' cached
+// data (and the cached Tables() list) untouched.
+func TestCachedInspector_Invalidate(t *testing.T) {
+	mock := &mockInspector{}
+	cfg := DefaultConfig()
+	c := newCollector(cfg, nil)
+	c.SetDBInspector(mock)
+
+	ci, ok := c.dbInspector.(*cachedDBInspector)
+	if !ok {
+		t.Fatal("SetDBInspector did not wrap the inspector in a cachedDBInspector")
+	}
+
+	// Populate the cache for two tables.
+	_, _ = ci.TableData("users", 1, 50, "")
+	_, _ = ci.TableData("posts", 1, 50, "")
+	if calls := atomic.LoadInt32(&mock.dataCalls); calls != 2 {
+		t.Fatalf("dataCalls = %d, want 2 after populating cache", calls)
+	}
+
+	ci.Invalidate("users")
+
+	// "users" was invalidated — this call must hit the underlying inspector.
+	_, _ = ci.TableData("users", 1, 50, "")
+	if calls := atomic.LoadInt32(&mock.dataCalls); calls != 3 {
+		t.Errorf("dataCalls = %d, want 3 (users should be a cache miss after Invalidate)", calls)
+	}
+
+	// "posts" was NOT invalidated — this call must stay cached.
+	_, _ = ci.TableData("posts", 1, 50, "")
+	if calls := atomic.LoadInt32(&mock.dataCalls); calls != 3 {
+		t.Errorf("dataCalls = %d, want 3 (posts should still be cached)", calls)
+	}
+}

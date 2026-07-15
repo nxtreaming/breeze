@@ -56,6 +56,14 @@ type Config struct {
         // handled by a reverse proxy. Defaults to false.
         DisableAuth bool `yaml:"disable_auth" json:"disable_auth"`
 
+        // AllowWrites enables Create/Update/Delete in the Database Browser.
+        // Defaults to false. Even when a DBWriter is configured via
+        // Collector.SetDBWriter, writes stay disabled until this is
+        // explicitly set — a deliberate double opt-in (operator config +
+        // application code) so upgrading breeze or wiring a DBWriter for
+        // read-side reasons never silently makes production data editable.
+        AllowWrites bool `yaml:"allow_writes" json:"allow_writes"`
+
         // MaxRequests is the rolling window size for the live requests buffer.
         // Older entries are evicted when the buffer is full.
         MaxRequests int `yaml:"max_requests" json:"max_requests"`

@@ -130,6 +130,17 @@ function apiPost(path, body){
     body: JSON.stringify(body||{})
   }).then(function(r){return r.json()});
 }
+function apiSend(path, method, body){
+  return fetch(S.base + '/api/' + path, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: body===undefined ? undefined : JSON.stringify(body)
+  }).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(data){
+      return {ok:r.ok, status:r.status, data:data};
+    });
+  });
+}
 
 // ─── WebSocket ─────────────────────────────────────────────────────────
 function connectWS(){
@@ -835,35 +846,51 @@ function renderDatabase(){
   html += '</div><div class="db-data">';
   if(sel!=null && S.dbTables[sel]){
     var t = S.dbTables[sel];
+    var writable = !!(S.dbData && S.dbData.writable);
     html += '<div class="toolbar"><strong style="font-family:var(--mono)">'+escapeHTML(t.name)+'</strong>'+
       '<input id="db-search" placeholder="Search..." value="'+escapeHTML(S._dbSearch||'')+'" style="max-width:240px">'+
       '<button id="db-refresh">Refresh</button>'+
+      (writable ? '<button id="db-new-row">New row</button>' : '')+
       '</div>';
     if(S.dbData){
       var d = S.dbData;
       html += '<div class="table-scroll" style="flex:1;overflow:auto"><table><thead><tr>';
-      d.columns.forEach(function(c){
-        html += '<th>'+escapeHTML(c.name)+'<br><span style="font-size:9px;text-transform:none;color:var(--text-muted)">'+escapeHTML(c.type)+(c.primary_key?' PK':'')+(c.nullable?'':' NN')+'</span></th>';
+      d.columns.forEach(function(col){
+        html += '<th>'+escapeHTML(col.name)+'<br><span style="font-size:9px;text-transform:none;color:var(--text-muted)">'+escapeHTML(col.type)+(col.primary_key?' PK':'')+(col.nullable?'':' NN')+'</span></th>';
       });
+      if(d.writable) html += '<th></th>';
       html += '</tr></thead><tbody>';
-      d.rows.forEach(function(row){
-        html += '<tr>';
-        d.columns.forEach(function(c){
-          var v = row[c.name];
-          html += '<td style="font-size:11px">'+(v==null?'<span style="color:var(--text-muted)">NULL</span>':escapeHTML(String(v)))+'</td>';
+      if(S._dbNewRow){
+        html += '<tr class="db-new-row">';
+        d.columns.forEach(function(col){
+          html += '<td><input data-col="'+escapeHTML(col.name)+'" style="width:100%" '+(col.primary_key?'placeholder="auto"':'')+'></td>';
         });
+        html += '<td><button id="db-new-row-save">Save</button> <button id="db-new-row-cancel">Cancel</button></td></tr>';
+      }
+      d.rows.forEach(function(row, ri){
+        html += '<tr data-ri="'+ri+'">';
+        d.columns.forEach(function(col){
+          var v = row[col.name];
+          var text = v==null?'':String(v);
+          if(d.writable && !col.primary_key){
+            html += '<td class="db-cell" data-col="'+escapeHTML(col.name)+'" contenteditable="true">'+escapeHTML(text)+'</td>';
+          } else {
+            html += '<td style="font-size:11px">'+(v==null?'<span style="color:var(--text-muted)">NULL</span>':escapeHTML(text))+'</td>';
+          }
+        });
+        if(d.writable) html += '<td><button class="danger db-delete-row" data-ri="'+ri+'">Delete</button></td>';
         html += '</tr>';
       });
-      if(!d.rows.length) html += '<tr><td colspan="'+d.columns.length+'" class="empty">No rows</td></tr>';
+      if(!d.rows.length && !S._dbNewRow) html += '<tr><td colspan="'+(d.columns.length+(d.writable?1:0))+'" class="empty">No rows</td></tr>';
       html += '</tbody></table></div>';
       html += '<div class="pager"><div>Page '+d.page+' of '+Math.max(1, Math.ceil(d.total/d.page_size))+' ('+fmtNum(d.total)+' rows)</div>'+
         '<div><button id="db-prev" '+(d.page<=1?'disabled':'')+'>Prev</button> '+
         '<button id="db-next" '+(d.page>=Math.ceil(d.total/d.page_size)?'disabled':'')+'>Next</button></div></div>';
     } else {
-      html += '<div class="empty" style="padding:40px"><div class="icon">\u25a3</div>Loading...</div>';
+      html += '<div class="empty" style="padding:40px"><div class="icon">&#x25a3;</div>Loading...</div>';
     }
   } else {
-    html += '<div class="empty" style="padding:40px"><div class="icon">\u25a3</div>Select a table to browse</div>';
+    html += '<div class="empty" style="padding:40px"><div class="icon">&#x25a3;</div>Select a table to browse</div>';
   }
   html += '</div></div>';
   c.innerHTML = html;
@@ -872,6 +899,7 @@ function renderDatabase(){
       S.dbTableSel = parseInt(it.dataset.idx);
       S.dbData = null;
       S.dbPage = 1;
+      S._dbNewRow = false;
       renderDatabase();
       loadDBData();
     });
@@ -880,6 +908,59 @@ function renderDatabase(){
   var dr = $('#db-refresh'); if(dr) dr.addEventListener('click', function(){S.dbPage=1; loadDBData();});
   var dp = $('#db-prev'); if(dp) dp.addEventListener('click', function(){S.dbPage--; loadDBData();});
   var dn = $('#db-next'); if(dn) dn.addEventListener('click', function(){S.dbPage++; loadDBData();});
+  var dnw = $('#db-new-row'); if(dnw) dnw.addEventListener('click', function(){S._dbNewRow=true; renderDatabase();});
+  var dnwc = $('#db-new-row-cancel'); if(dnwc) dnwc.addEventListener('click', function(){S._dbNewRow=false; renderDatabase();});
+  var dnws = $('#db-new-row-save'); if(dnws) dnws.addEventListener('click', saveNewDBRow);
+  $$('.db-cell').forEach(function(cell){
+    cell.addEventListener('blur', onDBCellBlur);
+  });
+  $$('.db-delete-row').forEach(function(btn){
+    btn.addEventListener('click', function(){ deleteDBRow(parseInt(btn.dataset.ri)); });
+  });
+}
+function pkPathFor(row, columns){
+  var parts = [];
+  columns.forEach(function(col){
+    if(col.primary_key) parts.push(encodeURIComponent(col.name)+'='+encodeURIComponent(row[col.name]));
+  });
+  return parts.join(',');
+}
+function onDBCellBlur(e){
+  var cell = e.target;
+  var ri = parseInt(cell.closest('tr').dataset.ri);
+  var col = cell.dataset.col;
+  var row = S.dbData.rows[ri];
+  var newVal = cell.textContent;
+  if((row[col]==null ? '' : String(row[col]))===newVal) return;
+  var t = S.dbTables[S.dbTableSel];
+  var pk = pkPathFor(row, S.dbData.columns);
+  var values = {}; values[col] = newVal;
+  apiSend('db/tables/'+encodeURIComponent(t.name)+'/rows/'+pk, 'PUT', {values: values}).then(function(res){
+    if(!res.ok){ alert('Update failed: '+((res.data&&res.data.error)||res.status)); loadDBData(); return; }
+    row[col] = newVal;
+  });
+}
+function deleteDBRow(ri){
+  if(!confirm('Delete this row?')) return;
+  var row = S.dbData.rows[ri];
+  var t = S.dbTables[S.dbTableSel];
+  var pk = pkPathFor(row, S.dbData.columns);
+  apiSend('db/tables/'+encodeURIComponent(t.name)+'/rows/'+pk, 'DELETE').then(function(res){
+    if(!res.ok){ alert('Delete failed: '+((res.data&&res.data.error)||res.status)); return; }
+    loadDBData();
+  });
+}
+function saveNewDBRow(){
+  var t = S.dbTables[S.dbTableSel];
+  var values = {};
+  $$('#page-database tr.db-new-row input').forEach(function(input){
+    if(input.value!=='') values[input.dataset.col] = input.value;
+  });
+  apiSend('db/tables/'+encodeURIComponent(t.name)+'/rows', 'POST', {values: values}).then(function(res){
+    if(!res.ok){ alert('Insert failed: '+((res.data&&res.data.error)||res.status)); return; }
+    S._dbNewRow = false;
+    loadDBData();
+  });
 }
 function loadDBData(){
   if(S.dbTableSel==null) return;

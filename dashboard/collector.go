@@ -79,6 +79,11 @@ type Collector struct {
         // Database inspector used by the database browser.
         dbInspector DBInspector
 
+        // Database writer used by the database browser's CRUD UI. Optional —
+        // nil means the Database Browser stays read-only regardless of
+        // Config.AllowWrites (see writableGuard in api.go).
+        dbWriter DBWriter
+
         // Persistence: storage backend + state tracking.
         storage     Storage
         uniqueIPsMu sync.RWMutex
@@ -143,6 +148,26 @@ func (c *Collector) SetDBInspector(inspector DBInspector) {
                 return
         }
         c.dbInspector = newCachedDBInspector(inspector, 30*time.Second)
+}
+
+// DBWriter exposes the current database writer, if one was set.
+func (c *Collector) DBWriter() DBWriter {
+        return c.dbWriter
+}
+
+// SetDBWriter installs a database writer, enabling Create/Update/Delete in
+// the Database Browser (still gated by Config.AllowWrites). Passing nil
+// clears the writer and reverts the Database Browser to read-only.
+func (c *Collector) SetDBWriter(w DBWriter) {
+        c.dbWriter = w
+}
+
+// invalidateTableCache clears the cached Database Browser rows for table
+// after a successful write. It is a no-op if no inspector is configured.
+func (c *Collector) invalidateTableCache(table string) {
+        if ci, ok := c.dbInspector.(*cachedDBInspector); ok {
+                ci.Invalidate(table)
+        }
 }
 
 // Config returns the active configuration.

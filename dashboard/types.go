@@ -57,6 +57,12 @@ type TableData struct {
         Page     int                    `json:"page"`
         PageSize int                    `json:"page_size"`
         Total    int64                  `json:"total"`
+        // Writable is true when the Database Browser's Create/Update/Delete UI
+        // is enabled for this response — i.e. Config.AllowWrites is true AND
+        // a DBWriter is configured. The frontend uses this as the single
+        // source of truth for whether to render edit controls; it never
+        // infers writability on its own.
+        Writable bool                   `json:"writable,omitempty"`
         Columns  []TableColumn          `json:"columns,omitempty"`
         Rows     []map[string]any       `json:"rows,omitempty"`
 }

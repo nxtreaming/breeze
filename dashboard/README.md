@@ -68,7 +68,7 @@ Every registered route with Method, Path, Requests, Avg Latency, Max Latency, La
 A native API client built into the dashboard (no Scalar redirect). Select any registered endpoint, set headers/body, and execute. The response is pretty-printed and one-click copy buttons generate ready-to-run snippets in **curl, Go, JavaScript, Python, C#, and PHP**.
 
 #### 7. Database Browser
-Browse every table with pagination, search, and column metadata (type, nullable, primary key, index, defaults, foreign-key references). Read-only by default — no raw SQL editor.
+Browse every table with pagination, search, and column metadata (type, nullable, primary key, index, defaults, foreign-key references). Read-only unless both `Config.AllowWrites` is `true` and the application has called `Collector.SetDBWriter` with a `DBWriter` implementation — in which case rows can be created, edited inline, and deleted directly from the browser. See [DBWriter](#dbwriter-optional-crud) below.
 
 #### 8. ORM Query Monitor
 Every SQL statement executed by the ORM is captured with: SQL, Args, Duration, Rows Returned, File:Line, Error. Slow queries (>100ms configurable) are highlighted. Click a row to expand the full SQL and arguments.
@@ -134,6 +134,33 @@ dashboard:
 | `slow_query_ms` | `100` | Threshold for highlighting slow queries. |
 | `slow_request_ms` | `500` | Threshold for highlighting slow requests. |
 | `masked_headers` | sensible defaults | Header names (case-insensitive) whose values are redacted in the inspector. |
+
+---
+
+## DBWriter (optional CRUD)
+
+By default the Database Browser is read-only. To enable Create/Update/Delete:
+
+```go
+coll.SetDBInspector(store) // existing read-only interface
+coll.SetDBWriter(store)    // NEW — enables writes
+cfg.AllowWrites = true     // NEW — must also be explicitly enabled
+```
+
+`DBWriter` is a separate interface from `DBInspector` so existing read-only
+integrations are unaffected:
+
+```go
+type DBWriter interface {
+    InsertRow(table string, values map[string]any) (map[string]any, error)
+    UpdateRow(table string, pk map[string]any, values map[string]any) error
+    DeleteRow(table string, pk map[string]any) error
+}
+```
+
+Both `Config.AllowWrites` and a configured `DBWriter` are required — either
+one alone leaves the browser read-only. See `cmd/dashboard-example/main.go`
+for a full `UserStore` implementation of both interfaces.
 
 ---
 
