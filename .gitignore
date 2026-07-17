@@ -8,3 +8,5 @@
 /.idea/.gitignore
 *.diff
 *.test
+*.bak
+*.exe

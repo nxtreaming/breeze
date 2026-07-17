@@ -35,6 +35,7 @@ efficiently while keeping your code clean and maintainable.
   - [High-Performance Routing](#-high-performance-routing)
   - [Native WebSocket Engine](#-native-websocket-engine)
     - [Built-in OpenAPI / Scalar](#-built-in-openapi--scalar)
+    - [gRPC Code Generation](#-grpc-code-generation)
   - [Production Middleware](#-production-middleware)
   - [Built-in Developer Dashboard](#-built-in-developer-dashboard)
   - [Developer Experience](#-developer-experience)
@@ -151,11 +152,22 @@ breeze generate resource User name:string email:string age:int
 breeze generate handler Session --methods=get,create
 ```
 
-Both generators write to `handlers/<name>.go` and register routes in a
-single `routes_generated.go` file — your hand-written `main.go` is never
-touched. Re-running `generate` for the same resource replaces its block,
-so it's safe to regenerate after adding fields (pass `--force` to overwrite
-the handler file too).
+**Generate gRPC server/client scaffolding** from an interface declared in
+any `*_grpc.go` file — no naming convention on methods, just a
+`grpc_type` comment (`Unary`, `ServerSideStreaming`, `ClientSideStreaming`,
+or `Bidirectional`) above each method:
+
+```bash
+breeze generate grpc UserService
+```
+
+The `resource` and `handler` generators write to `handlers/<name>.go` and
+register routes in a single `routes_generated.go` file — your hand-written
+`main.go` is never touched. Re-running `generate` for the same resource
+replaces its block, so it's safe to regenerate after adding fields (pass
+`--force` to overwrite the handler file too). The `grpc` generator writes
+its own server/client/adapter files alongside the `*_grpc.go` interface it
+was generated from, and also supports `--force` to overwrite them.
 
 Supported field types: `string`, `int`, `int64`, `float64`, `bool`, `time.Time`.
 
@@ -165,8 +177,13 @@ Supported field types: `string`, `int`, `int64`, `float64`, `bool`, `time.Time`.
 
 - ⚡ Event-driven architecture powered by `gnet`
 - 🧠 Zero-copy HTTP request parsing where possible
-- 📦 Minimal allocations with `sync.Pool`
-- 🔥 Optimized response serialization (no `fmt.Sprintf`)
+- 📦 Minimal allocations via pooled `Context`, `HTTPResponse`, and route
+  parameter maps (`sync.Pool`)
+- 🔥 Optimized response serialization (precomputed status-line table,
+  preallocated buffer, no `fmt.Sprintf`)
+- 🧵 Configurable Worker Pool backpressure (`OverflowBlock` /
+  `OverflowReject` / `OverflowSpawn`)
+- 🌲 Single-allocation middleware chain construction in the router
 - 💨 Lock-free fast paths for critical operations
 - 🎯 Preallocated buffers & cached status codes
 - 📈 Worker Pool for scalable request processing
@@ -197,6 +214,15 @@ Supported field types: `string`, `int`, `int64`, `float64`, `bool`, `time.Time`.
 - 🎯 Schema generation
 - 🔍 Typed request & response definitions
 - 🌍 Ready for Scalar API Reference
+
+### 📡 gRPC Code Generation
+
+- 🔎 Auto-detects gRPC services from any `*_grpc.go` interface file —
+  no naming convention required
+- 🏷 Call style (`Unary`, `ServerSideStreaming`, `ClientSideStreaming`,
+  `Bidirectional`) set per-method via a `grpc_type` comment annotation
+- 🧩 Generates server/client scaffolding and adapters with
+  `breeze generate grpc <InterfaceName>`
 
 ### 🛡 Production Middleware
 

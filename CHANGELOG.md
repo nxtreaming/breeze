@@ -4,6 +4,96 @@ All changes made to the Breeze framework.
 
 ---
 
+## [v.1.4.1] — Performance Improvements & gRPC Codegen
+
+### New Features
+
+#### gRPC Code Generation (`breeze generate grpc`)
+
+A new CLI generator scans the project for `_grpc.go` files, treats every
+interface declared in them as a gRPC service, and generates the
+corresponding server/client scaffolding, adapters, and boilerplate:
+
+- Each method's call style is driven by a `grpc_type` comment annotation
+  (`Unary`, `ServerSideStreaming`, `ClientSideStreaming`, `Bidirectional`)
+  rather than a naming convention.
+- New CLI usage: `breeze generate grpc <InterfaceName> [--force]`.
+- Implemented across five new files: `generate_grpc.go` (detection +
+  parsing), `generate_grpc_adapters.go`, `generate_grpc_files.go`,
+  `generate_grpc_tags.go`, and a matching test suite
+  (`generate_grpc_test.go`).
+
+#### Editable Database Browser (dashboard)
+
+The dashboard's Database Browser can now perform writes, not just reads:
+
+- New `DBWriter` interface (kept separate from `DBInspector` so existing
+  read-only integrations don't break) with `InsertRow` / `UpdateRow` /
+  `DeleteRow`, plus a sentinel `ErrRowNotFound` error.
+- New `Config.AllowWrites` gate — defaults to `false`, so writes must be
+  explicitly opted into.
+- New HTTP endpoints: `POST /rows`, `PUT /rows/:pk`, `DELETE /rows/:pk`,
+  with support for composite primary keys via a new `parsePK` helper.
+- Table cache is invalidated automatically after any write.
+- `TableData` now reports a `writable` flag so the UI can conditionally
+  show edit controls.
+- Inline edit / delete / new-row UI added to the Database Browser
+  frontend.
+- NULL cells are no longer overwritten with an empty string when a cell
+  is blurred without being edited.
+
+### Performance Improvements
+
+- **Worker pool overhaul** (`workerpool.go`, new `pool.go`): the pool now
+  supports a configurable `OverflowPolicy` (`OverflowBlock`,
+  `OverflowReject`, `OverflowSpawn`) instead of always spawning a
+  goroutine on backpressure, plus a two-phase shutdown to avoid
+  send-on-closed-channel races. `*Context`, `*HTTPResponse`, and route
+  parameter maps are now pooled via `sync.Pool` (see `pool.go`) to cut
+  per-request allocations.
+- **Router**: `Router.findRoute` builds the middleware chain (global +
+  route middlewares + handler) in a single allocation instead of the
+  previous double-build through a `finalHandler` closure, and route
+  parameter maps are drawn from a pool instead of freshly allocated on
+  every match.
+- **Response serialization**: HTTP status lines are now generated from a
+  precomputed lookup table instead of per-request string building, and
+  the response buffer is preallocated using an estimated size instead of
+  growing incrementally.
+- **Context**: response header maps are now shared/copy-on-write
+  (`headersShared`) to avoid an allocation when a handler never mutates
+  headers, and header/body writes (`WriteString`, `JSON`, `HTML`,
+  `Status`) route through a shared `ensureResponse` helper. Added
+  `ctx.GetHeader`.
+- **Compression middleware**: broader rework of the post-`Next()`
+  pipeline (building on the ordering fix from the previous release) to
+  reduce redundant work on the hot path.
+
+### Bug Fixes
+
+- **`dashboard/auth.go`** — Dashboard Basic Auth / login previously used a
+  random per-call salt when hashing the password, so a PBKDF2 hash of a
+  correct password could never match the stored hash and valid
+  credentials were always rejected. Fixed by hashing against a fixed,
+  package-level salt (fixes #27).
+- **`dashboard/mask.go`** — Secret masking only matched plain
+  `key=value` / `key:value` tokens, so JSON-style log lines such as
+  `"authorization":"Bearer xyz"` were never redacted and could leak into
+  the dashboard's log buffer. `maskLine` now recognizes quoted JSON keys
+  and values and redacts them while preserving surrounding JSON
+  punctuation (fixes #28).
+
+### Documentation / Housekeeping
+
+- Removed the "Support the Project" donation section from `README.md`.
+- Added design spec and implementation plan docs for the editable
+  Database Browser feature (later removed from the tree — see "Removed
+  docs" commit).
+- Documented `DBWriter` and the editable Database Browser in
+  `dashboard/README.md`.
+
+---
+
 ## [v1.3.1]
 
 ### New Features
