@@ -6,12 +6,12 @@ import "net/url"
 type Method string
 
 const (
-	GET     Method = "GET"
-	PUT     Method = "PUT"
-	PATCH   Method = "PATCH"
-	POST    Method = "POST"
-	DELETE  Method = "DELETE"
-	OPTIONS Method = "OPTIONS" // FIX: was "OPTION" — RFC 9110 defines "OPTIONS"
+        GET     Method = "GET"
+        PUT     Method = "PUT"
+        PATCH   Method = "PATCH"
+        POST    Method = "POST"
+        DELETE  Method = "DELETE"
+        OPTIONS Method = "OPTIONS" // FIX: was "OPTION" — RFC 9110 defines "OPTIONS"
 )
 
 // HTTPRequest holds a fully parsed HTTP request.
@@ -38,26 +38,26 @@ const (
 // req.Method is either a package-level constant (no allocation) or a
 // freshly copied string for unknown methods — it does not point into owned.
 type HTTPRequest struct {
-	Method Method
-	Path   string
-	Query  url.Values
-	Header map[string]string
-	Body   []byte
-	// owned holds the header bytes that req.Path and req.Header strings
-	// point into. Unexported so callers cannot mutate it; its presence
-	// here ensures the GC can trace the pointer chain from any escaped
-	// header string back to this backing array.
-	owned []byte
+        Method Method
+        Path   string
+        Query  url.Values
+        Header map[string]string
+        Body   []byte
+        // owned holds the header bytes that req.Path and req.Header strings
+        // point into. Unexported so callers cannot mutate it; its presence
+        // here ensures the GC can trace the pointer chain from any escaped
+        // header string back to this backing array.
+        owned []byte
 }
 
 // HTTPResponse represents an HTTP response.
 type HTTPResponse struct {
-	Status  int
-	Headers map[string]string
-	Body    []byte
-	// headersShared is true when Headers points to one of the package-level
-	// shared maps (hdrsJSON / hdrsText / hdrsHTML). SetHeader must copy-on-write
-	// before mutating. Go does not allow map == map comparisons, so we use this
-	// flag as the sentinel instead.
-	headersShared bool
+        Status  int
+        Headers map[string]string
+        Body    []byte
+        // headersShared is true when Headers points to one of the package-level
+        // shared maps (hdrsJSON / hdrsText / hdrsHTML). SetHeader must copy-on-write
+        // before mutating. Go does not allow map == map comparisons, so we use this
+        // flag as the sentinel instead.
+        headersShared bool
 }

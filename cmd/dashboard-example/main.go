@@ -238,7 +238,7 @@ func (s *UserStore) DeleteRow(table string, pk map[string]any) error {
 
 func main() {
 	router := breeze.NewRouter()
-	pool := breeze.NewWorkerPool(runtime.NumCPU())
+	pool := breeze.NewEventLoopWorkerPool(runtime.NumCPU())
 	app := breeze.New(router, pool)
 
 	store := NewUserStore()

@@ -67,7 +67,7 @@ func (h *ChatHandler) OnClose(conn *breeze.WSConn, code uint16, reason string) {
 
 func main() {
 	router := breeze.NewRouter()
-	pool := breeze.NewWorkerPool(runtime.NumCPU())
+	pool := breeze.NewEventLoopWorkerPool(runtime.NumCPU())
 	app := breeze.New(router, pool)
 
 	// WebSocket() returns the hub immediately — inject it into the handler.

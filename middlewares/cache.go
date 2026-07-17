@@ -62,7 +62,7 @@ func (c *ETagCache) ETagMiddleware() breeze.HandlerFunc {
 		// Pre-check: if the client sent If-None-Match, see if we have a
 		// stored ETag for this URL. If it matches, we can skip the handler
 		// entirely and return 304 immediately.
-		inm := ctx.Req.Header["If-None-Match"]
+		inm := ctx.Req.Header["if-none-match"]
 		if inm != "" {
 			cacheKey := buildCacheKey(ctx)
 			c.mu.RLock()

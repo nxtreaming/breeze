@@ -14,7 +14,15 @@ type route struct {
         segments     []string
         // paramIndex[i] is true when segments[i] is a :param (cached at registration)
         paramIndex   []bool
-        handler      HandlerFunc
+        handler      HandlerFunc // finalHandler closure (for backward compat with public Find)
+        // userHandler is the actual handler passed to Handle, without the
+        // finalHandler wrapper. Used by findRoute to build the chain in one alloc.
+        userHandler  HandlerFunc
+        // routeMWs is the per-route middleware slice (defensive copy made at
+        // registration). Used by findRoute to build the full middleware chain
+        // in a single allocation in OnTraffic, eliminating the double-build
+        // that finalHandler caused.
+        routeMWs     []HandlerFunc
         hasWildcard  bool
         wildcardName string
         // paramCount is the number of :param segments (pre-counted to pre-size the map)
@@ -121,6 +129,10 @@ func (r *Router) Handle(method Method, pattern string, handler HandlerFunc, midd
                 copy(routeMWs, middlewares)
         }
 
+        // finalHandler is kept for backward compatibility with the public
+        // Find method. OnTraffic uses findRoute (which returns the actual
+        // handler + routeMWs) to build the chain in one allocation, avoiding
+        // the double-build that finalHandler causes.
         finalHandler := func(ctx *Context) {
                 ctx.middlewares = append(routeMWs, handler)
                 ctx.index = -1
@@ -133,6 +145,8 @@ func (r *Router) Handle(method Method, pattern string, handler HandlerFunc, midd
                 segments:     segments,
                 paramIndex:   paramIdx,
                 handler:      finalHandler,
+                userHandler:  handler,
+                routeMWs:     routeMWs,
                 hasWildcard:  hasWildcard,
                 wildcardName: wildcardName,
                 paramCount:   paramCount,
@@ -206,7 +220,7 @@ func (r *Router) Find(req *HTTPRequest) (HandlerFunc, []HandlerFunc, map[string]
                         }
                         var params map[string]string
                         if rt.paramCount > 0 || rt.wildcardName != "" {
-                                params = make(map[string]string, rt.paramCount+1)
+                                params = acquireParams()
                                 for i, rseg := range rt.segments {
                                         if rt.paramIndex[i] {
                                                 params[rseg[1:]] = reqSegments[i]
@@ -236,7 +250,7 @@ func (r *Router) Find(req *HTTPRequest) (HandlerFunc, []HandlerFunc, map[string]
                 // Only allocate the params map when there are actual params.
                 var params map[string]string
                 if rt.paramCount > 0 {
-                        params = make(map[string]string, rt.paramCount)
+                        params = acquireParams()
                         for i, rseg := range rt.segments {
                                 if rt.paramIndex[i] {
                                         params[rseg[1:]] = reqSegments[i]
@@ -263,4 +277,137 @@ func (r *Router) Find(req *HTTPRequest) (HandlerFunc, []HandlerFunc, map[string]
         }
 
         return nil, nil, nil
+}
+
+// findRoute is the internal version of Find used by OnTraffic. It returns
+// the actual user handler (not the finalHandler closure) and the route-local
+// middlewares separately, so OnTraffic can build the full middleware chain
+// in a single allocation:
+//
+//      chain = [global_mw..., route_mw..., handler]
+//
+// This eliminates the double-build that the finalHandler closure caused
+// (outer append in OnTraffic + inner append in finalHandler).
+//
+// The global middlewares (r.middlewares) are NOT returned here — OnTraffic
+// accesses them via r.middlewares directly. This avoids an extra return
+// value and keeps the signature minimal.
+func (r *Router) findRoute(req *HTTPRequest) (handler HandlerFunc, routeMWs []HandlerFunc, params map[string]string) {
+        // Split the request path into segments without allocating a []string.
+        // We store them in a small stack-allocated array for the common case.
+        var segBuf [16]string
+        reqSegments := segBuf[:0]
+
+        path := req.Path
+        if len(path) > 0 && path[0] == '/' {
+                path = path[1:]
+        }
+        if len(path) > 0 && path[len(path)-1] == '/' {
+                path = path[:len(path)-1]
+        }
+
+        if path != "" {
+                start := 0
+                for i := 0; i <= len(path); i++ {
+                        if i == len(path) || path[i] == '/' {
+                                seg := path[start:i]
+                                if len(reqSegments) < len(segBuf) {
+                                        reqSegments = reqSegments[:len(reqSegments)+1]
+                                        reqSegments[len(reqSegments)-1] = seg
+                                } else {
+                                        reqSegments = append(reqSegments, seg)
+                                }
+                                start = i + 1
+                        }
+                }
+        }
+
+        nReq := len(reqSegments)
+
+        for _, rt := range r.routes {
+                if rt.method != req.Method {
+                        continue
+                }
+
+                if rt.hasWildcard {
+                        if nReq < len(rt.segments) {
+                                continue
+                        }
+                        match := true
+                        for i, rseg := range rt.segments {
+                                if rt.paramIndex[i] {
+                                        // param: always matches, captured below
+                                } else if rseg != reqSegments[i] {
+                                        match = false
+                                        break
+                                }
+                        }
+                        if !match {
+                                continue
+                        }
+                        if rt.paramCount > 0 || rt.wildcardName != "" {
+                                params = acquireParams()
+                                for i, rseg := range rt.segments {
+                                        if rt.paramIndex[i] {
+                                                params[rseg[1:]] = reqSegments[i]
+                                        }
+                                }
+                                params[rt.wildcardName] = strings.Join(reqSegments[len(rt.segments):], "/")
+                        }
+                        return rt.userHandler, rt.routeMWs, params
+                }
+
+                // Normal route: segment count must match exactly.
+                if len(rt.segments) != nReq {
+                        continue
+                }
+
+                match := true
+                for i, rseg := range rt.segments {
+                        if !rt.paramIndex[i] && rseg != reqSegments[i] {
+                                match = false
+                                break
+                        }
+                }
+                if !match {
+                        continue
+                }
+
+                var params map[string]string
+                if rt.paramCount > 0 {
+                        params = acquireParams()
+                        for i, rseg := range rt.segments {
+                                if rt.paramIndex[i] {
+                                        params[rseg[1:]] = reqSegments[i]
+                                }
+                        }
+                }
+
+                return rt.userHandler, rt.routeMWs, params
+        }
+
+        // Auto serve index.html for "/"
+        if r.autoServeRoot && nReq == 0 && req.Method == GET {
+                indexPath := filepath.Join(r.staticDir, "index.html")
+                if _, err := os.Stat(indexPath); err == nil {
+                        h := func(ctx *Context) {
+                                data, err := os.ReadFile(indexPath)
+                                if err != nil {
+                                        ctx.WriteString("Error reading index.html")
+                                        return
+                                }
+                                ctx.HTML(data)
+                        }
+                        return h, nil, nil
+                }
+        }
+
+        return nil, nil, nil
+}
+
+// Middlewares returns the router's global middleware slice. This is used
+// by OnTraffic to build the full middleware chain in a single allocation.
+// The returned slice is NOT a copy — callers must not mutate it.
+func (r *Router) Middlewares() []HandlerFunc {
+        return r.middlewares
 }

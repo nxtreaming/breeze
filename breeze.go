@@ -22,6 +22,16 @@ type Breeze struct {
 // exceeds this many bytes, to avoid keeping large receive buffers alive.
 const compactThreshold = 512
 
+// New creates a Breeze server with the given router and worker pool.
+//
+// The pool's OverflowPolicy MUST be OverflowSpawn (or OverflowReject) —
+// NOT OverflowBlock — because OnTraffic calls pool.Submit from the gnet
+// event-loop goroutine, and a blocking Submit would stall ALL connections
+// on that reactor.
+//
+// Use breeze.NewEventLoopWorkerPool(n) to create a suitable pool. The
+// deprecated breeze.NewWorkerPool(n) also works (it uses OverflowSpawn
+// for backward compatibility).
 func New(router *Router, pool *WorkerPool) *Breeze {
         return &Breeze{
                 BuiltinEventEngine: &gnet.BuiltinEventEngine{},
@@ -79,32 +89,45 @@ func (s *Breeze) OnTraffic(c gnet.Conn) gnet.Action {
                         break // incomplete — wait for more data
                 }
 
-                handler, middlewares, params := s.Router.Find(req)
+                handler, routeMWs, params := s.Router.findRoute(req)
 
                 if handler == nil {
                         c.AsyncWrite([]byte("HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found"), nil)
                 } else {
-                        ctx := &Context{
-                                Conn:        c,
-                                Req:         req,
-                                params:      params,
-                                middlewares: append(middlewares, handler),
-                                index:       -1,
-                        }
+                        // Build the full middleware chain in ONE allocation:
+                        //   [global_mw..., route_mw..., handler]
+                        globalMWs := s.Router.middlewares
+                        chain := make([]HandlerFunc, 0, len(globalMWs)+len(routeMWs)+1)
+                        chain = append(chain, globalMWs...)
+                        chain = append(chain, routeMWs...)
+                        chain = append(chain, handler)
+
+                        // Acquire Context from the pool (Phase 1.3.4).
+                        // Released in the exec closure's deferred cleanup
+                        // after the response is written.
+                        ctx := acquireContext()
+                        ctx.Conn = c
+                        ctx.Req = req
+                        ctx.params = params
+                        ctx.middlewares = chain
+                        ctx.index = -1
 
                         exec := func() {
-                                // Recover from panics in handlers so a buggy handler
-                                // does not crash the worker goroutine. A crashed worker
-                                // would leak the WaitGroup counter (the defer Done() would
-                                // never run) and eventually deadlock the pool on Shutdown.
+                                // Release defer is registered FIRST so it
+                                // runs LAST (after the recover defer). This
+                                // ensures the response is fully written
+                                // before the Context is returned to the pool.
+                                defer releaseContext(ctx)
+                                // Recover from panics in handlers so a buggy
+                                // handler does not crash the worker goroutine.
                                 defer func() {
                                         if r := recover(); r != nil {
                                                 fmt.Printf("[Breeze][PANIC] %v\n%s\n", r, debug.Stack())
                                                 if ctx.Res == nil {
                                                         ctx.Res = &HTTPResponse{
-                                                                Status: 500,
+                                                                Status:  500,
                                                                 Headers: map[string]string{"Content-Type": "text/plain"},
-                                                                Body: []byte("Internal Server Error"),
+                                                                Body:    []byte("Internal Server Error"),
                                                         }
                                                 }
                                                 c.AsyncWrite(ctx.Res.Bytes(), nil)
